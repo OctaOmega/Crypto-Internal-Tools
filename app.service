@@ -1,0 +1,24 @@
+[Unit]
+Description=Gunicorn instance to serve Crypto Internal Tools
+After=network.target
+
+[Service]
+# Service User configuration
+User=your_user
+Group=your_group
+
+# Directory configuration
+WorkingDirectory=/path/to/your/app
+Environment="PATH=/path/to/your/app/venv/bin"
+
+# ExecStart command
+# This assumes a virtual environment 'venv' is used.
+# Adjust the path to gunicorn setup accordingly.
+ExecStart=/path/to/your/app/venv/bin/gunicorn -c gunicorn_config.py wsgi:app
+
+# Restart configuration
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
