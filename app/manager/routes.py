@@ -750,8 +750,8 @@ def reports_data_courses():
     data = []
     
     for course in courses:
-        enrolled_count = course.enrollments.count()
-        completed_count = course.enrollments.filter_by(status=EnrollmentStatus.COMPLETED.value).count()
+        enrolled_count = len(course.enrollments)
+        completed_count = sum(1 for e in course.enrollments if e.status == EnrollmentStatus.COMPLETED.value)
         
         # Training Group
         t_group_name = course.training_group.name if course.training_group else 'None'
