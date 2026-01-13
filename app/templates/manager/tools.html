@@ -1,0 +1,31 @@
+{% extends "manager/layout.html" %}
+
+{% block manager_content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Manager Internal Tools</h1>
+</div>
+
+<div class="row">
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow-sm hover-shadow">
+            <div class="card-body text-center">
+                <i class="fas fa-key fa-3x text-td-green mb-3"></i>
+                <h5 class="card-title">CSR Decoder</h5>
+                <p class="card-text text-muted">Decode and verify Certificate Signing Requests (CSRs).</p>
+                <a href="{{ url_for('manager.tool_csr') }}" class="btn btn-outline-success stretched-link">Open Tool</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow-sm hover-shadow">
+            <div class="card-body text-center">
+                <i class="fas fa-certificate fa-3x text-primary mb-3"></i>
+                <h5 class="card-title">Certificate Decoder</h5>
+                <p class="card-text text-muted">Decode X.509 Certificates and view details.</p>
+                <a href="{{ url_for('manager.tool_x509') }}" class="btn btn-outline-primary stretched-link">Open
+                    Tool</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,34 @@
+:root {
+    --td-green: #008a00;
+    --td-green-hover: #006e00;
+    --td-light-green: #e6f4e6;
+}
+
+.text-td-green { color: var(--td-green) !important; }
+.bg-td-green { background-color: var(--td-green) !important; color: white; }
+
+.btn-td-green {
+    background-color: var(--td-green);
+    color: white;
+    border: none;
+}
+
+.btn-td-green:hover {
+    background-color: var(--td-green-hover);
+    color: white;
+}
+
+.hover-shadow:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important;
+    transition: all .2s;
+}
+
+.nav-tabs .nav-link.active {
+    color: var(--td-green);
+    border-top: 3px solid var(--td-green);
+}
+
+.nav-link {
+    color: #555;
+}

@@ -1,0 +1,75 @@
+{% extends "staff/layout.html" %}
+
+{% block staff_content %}
+<h2 class="mb-4">My Dashboard</h2>
+
+<ul class="nav nav-tabs mb-4" id="myTab" role="tablist">
+    <li class="nav-item">
+        <a class="nav-link active" id="active-tab" data-bs-toggle="tab" href="#active" role="tab">Active Trainings</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" id="completed-tab" data-bs-toggle="tab" href="#completed" role="tab">Completed</a>
+    </li>
+</ul>
+
+<div class="tab-content" id="myTabContent">
+    <div class="tab-pane fade show active" id="active" role="tabpanel">
+        {% if not active %}
+        <div class="text-center py-5 bg-white rounded shadow-sm">
+            <p class="lead">You have no active trainings.</p>
+            <a href="{{ url_for('staff.catalog') }}" class="btn btn-td-green">Browse Catalog</a>
+        </div>
+        {% else %}
+        <div class="row row-cols-1 row-cols-md-3 g-4">
+            {% for enroll in active %}
+            <div class="col">
+                <div class="card h-100 border-top border-success border-4 shadow-sm">
+                    <div class="card-body d-flex flex-column">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <h5 class="card-title mb-0">{{ enroll.course.title }}</h5>
+                            {% if enroll.course.due_date %}
+                            {% if enroll.course.due_date < today %} <span class="badge bg-danger">Overdue</span>
+                                {% elif (enroll.course.due_date - today).days <= 7 %} <span
+                                    class="badge bg-warning text-dark">Due Soon</span>
+                                    {% else %}
+                                    <span class="badge bg-light text-muted border">{{
+                                        enroll.course.due_date.strftime('%Y-%m-%d') }}</span>
+                                    {% endif %}
+                                    {% endif %}
+                        </div>
+                        <p class="card-text text-muted small">{{ enroll.course.description|truncate(80) }}</p>
+                        <div class="mt-auto">
+                            <div class="progress mb-2" style="height: 5px;">
+                                <div class="progress-bar bg-success" role="progressbar" style="width: 15%"></div>
+                            </div>
+                            <a href="{{ url_for('staff.course_detail', course_id=enroll.course_id) }}"
+                                class="btn btn-sm btn-td-green w-100">Continue</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    <div class="tab-pane fade" id="completed" role="tabpanel">
+        <!-- Similar structure for completed -->
+        {% if not completed %}
+        <p class="text-muted">No completed trainings yet.</p>
+        {% else %}
+        <div class="list-group">
+            {% for enroll in completed %}
+            <div class="list-group-item d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="mb-0">{{ enroll.course.title }}</h6>
+                    <small class="text-muted">Completed on {{
+                        enroll.completed_at.strftime('%Y-%m-%d') if enroll.completed_at else 'Unknown' }}</small>
+                </div>
+                <span class="badge bg-success">Certificate</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

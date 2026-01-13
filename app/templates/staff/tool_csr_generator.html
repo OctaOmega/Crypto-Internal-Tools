@@ -1,0 +1,60 @@
+{% extends "staff/layout.html" %}
+
+{% block staff_content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card shadow-sm">
+            <div class="card-header bg-td-green text-white">
+                <h5 class="mb-0"><i class="fas fa-key me-2"></i> CSR Generator</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Create a Certificate Signing Request (CSR) and Private Key.</p>
+
+                <form method="POST">
+                    <div class="row g-3">
+                        <div class="col-md-12">
+                            <label for="cn" class="form-label">Common Name (CN) *</label>
+                            <input type="text" class="form-control" id="cn" name="cn" required
+                                placeholder="www.example.com">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="org" class="form-label">Organization Name (O)</label>
+                            <input type="text" class="form-control" id="org" name="org">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="ou" class="form-label">Organization Unit (OU)</label>
+                            <input type="text" class="form-control" id="ou" name="ou">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="city" class="form-label">City (L)</label>
+                            <input type="text" class="form-control" id="city" name="city">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="state" class="form-label">State/Province (ST)</label>
+                            <input type="text" class="form-control" id="state" name="state">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="country" class="form-label">Country (C)</label>
+                            <input type="text" class="form-control" id="country" name="country" placeholder="US">
+                        </div>
+                        <div class="col-md-12">
+                            <label for="sans" class="form-label">Subject Alternative Names (SANs)</label>
+                            <textarea class="form-control" id="sans" name="sans" rows="3"
+                                placeholder="dns:www.example.com, dns:example.com (comma separated)"></textarea>
+                        </div>
+                        <div class="col-md-12">
+                            <label for="password" class="form-label">Private Key Password (Optional)</label>
+                            <input type="password" class="form-control" id="password" name="password"
+                                placeholder="Leave blank for unencrypted key">
+                        </div>
+
+                        <div class="col-12 mt-4">
+                            <button type="submit" class="btn btn-td-green w-100">Generate CSR & Key (ZIP)</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

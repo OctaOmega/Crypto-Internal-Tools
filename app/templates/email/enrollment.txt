@@ -1,0 +1,7 @@
+Dear {{ user.name }},
+
+You have successfully enrolled in the course "{{ course.title }}".
+You can access the course here: {{ url_for('staff.course_detail', course_id=course.id, _external=True) }}
+
+Happy Learning!
+The Training Team

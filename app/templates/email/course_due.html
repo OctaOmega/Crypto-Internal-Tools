@@ -1,0 +1,6 @@
+<p>Dear {{ user.name }},</p>
+<p>This is a reminder that the course <b>{{ course.title }}</b> is due on {{ course.due_date.strftime('%Y-%m-%d') }}.
+</p>
+<p>Please ensure you complete it before the deadline.</p>
+<p><a href="{{ url_for('staff.course_detail', course_id=course.id, _external=True) }}">Go to Course</a></p>
+<p>Regards,<br>The Training Team</p>

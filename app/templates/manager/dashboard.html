@@ -1,0 +1,234 @@
+{% extends "manager/layout.html" %}
+
+{% block manager_content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Manager Dashboard</h1>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-4">
+    <div class="col-md-2">
+        <div class="card bg-td-green text-white h-100">
+            <div class="card-body p-3">
+                <small class="text-white-50">Total Staff</small>
+                <h3 class="mb-0">{{ stats.total_users }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card bg-white h-100 border-start border-success border-4">
+            <div class="card-body p-3">
+                <small class="text-muted">Total Courses</small>
+                <h3 class="mb-0">{{ stats.total_courses }}</h3>
+                <small class="text-success"><i class="fas fa-check"></i> {{ stats.published_courses }} Published</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card bg-white h-100">
+            <div class="card-body p-3">
+                <small class="text-muted">Enrollments</small>
+                <h3 class="mb-0 text-primary">{{ stats.active_enrollments + stats.completions }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card bg-white h-100">
+            <div class="card-body p-3">
+                <small class="text-muted">Active</small>
+                <h3 class="mb-0 text-warning">{{ stats.active_enrollments }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card bg-white h-100">
+            <div class="card-body p-3">
+                <small class="text-muted">Completed</small>
+                <h3 class="mb-0 text-success">{{ stats.completions }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row 1 -->
+<div class="row mb-4">
+    <div class="col-md-6 mb-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h6 class="mb-0">Top 5 Courses (Enrollments)</h6>
+            </div>
+            <div class="card-body">
+                <canvas id="topCoursesChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 mb-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h6 class="mb-0">Group Distribution</h6>
+            </div>
+            <div class="card-body">
+                <canvas id="groupStatsChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row 2 & Lists -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h6 class="mb-0">Most Active Learners (Time)</h6>
+            </div>
+            <ul class="list-group list-group-flush">
+                {% for user, minutes in top_users_time %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span>{{ user }}</span>
+                    <span class="badge bg-td-green rounded-pill">{{ minutes }} mins</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h6 class="mb-0">Most Enrolled Users</h6>
+            </div>
+            <ul class="list-group list-group-flush">
+                {% for user, count in top_users_enrollments %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span>{{ user }}</span>
+                    <span class="badge bg-primary rounded-pill">{{ count }} courses</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h6 class="mb-0">Recent Activity</h6>
+            </div>
+            <div class="card-body p-0" style="max-height: 300px; overflow-y: auto;">
+                {% if activity %}
+                <ul class="list-group list-group-flush">
+                    {% for event in activity %}
+                    <li class="list-group-item small">
+                        <div class="d-flex justify-content-between">
+                            <strong>{{ event.type|replace('_', ' ')|title }}</strong>
+                            <span class="text-muted">{{ event.created_at.strftime('%m-%d %H:%M') }}</span>
+                        </div>
+                        <div class="text-truncate">
+                            User #{{ event.actor_id }} {% if event.course_id %}Course #{{ event.course_id }}{% endif %}
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted p-3 text-center">No recent activity.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Sidebar Toggle
+        const sidebarToggle = document.getElementById('sidebarToggle');
+        if (sidebarToggle) {
+            sidebarToggle.addEventListener('click', function (event) {
+                event.preventDefault();
+                const sidebar = document.getElementById('sidebarMenu');
+                const main = document.getElementById('mainContent');
+
+                if (sidebar) {
+                    sidebar.classList.toggle('d-none');
+                    sidebar.classList.toggle('d-md-block');
+
+                    if (sidebar.classList.contains('d-none')) {
+                        main.classList.remove('col-md-9', 'col-lg-10');
+                        main.classList.add('col-md-12');
+                    } else {
+                        main.classList.add('col-md-9', 'col-lg-10');
+                        main.classList.remove('col-md-12');
+                    }
+                }
+            });
+        }
+
+        // Data Preparation
+        const topCoursesData = {
+            labels: [
+                {% for c, count in top_courses %}
+                    {{ c| tojson }},
+        {% endfor %}
+            ],
+        data: [
+        {% for c, count in top_courses %}
+    { { count } },
+    {% endfor %}
+            ]
+        };
+
+    const groupStatsData = {
+        labels: [
+            {% for g, count in group_stats %}
+    { { g | tojson } },
+    {% endfor %}
+            ],
+    data: [
+        {% for g, count in group_stats %}
+    { { count } },
+    {% endfor %}
+            ]
+        };
+
+    // Charts
+    const topCoursesCtx = document.getElementById('topCoursesChart').getContext('2d');
+    new Chart(topCoursesCtx, {
+        type: 'bar',
+        data: {
+            labels: topCoursesData.labels,
+            datasets: [{
+                label: 'Enrollments',
+                data: topCoursesData.data,
+                backgroundColor: '#008a00',
+                borderColor: '#006e00',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            indexAxis: 'y',
+            plugins: {
+                legend: { display: false }
+            }
+        }
+    });
+
+    const groupStatsCtx = document.getElementById('groupStatsChart').getContext('2d');
+    new Chart(groupStatsCtx, {
+        type: 'doughnut',
+        data: {
+            labels: groupStatsData.labels,
+            datasets: [{
+                data: groupStatsData.data,
+                backgroundColor: ['#008a00', '#28a745', '#ffc107', '#17a2b8', '#6c757d', '#adb5bd']
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'right' }
+            }
+        }
+    });
+    });
+</script>
+{% endblock %}

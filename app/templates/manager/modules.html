@@ -1,0 +1,83 @@
+{% extends "manager/layout.html" %}
+
+{% block manager_content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">{{ course.title }}: Content</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('manager.new_module', id=course.id) }}" class="btn btn-sm btn-success me-2">
+            <i class="fas fa-plus"></i> Add Module
+        </a>
+        <a href="{{ url_for('manager.courses') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Courses
+        </a>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="bg-light">
+                    <tr>
+                        <th class="ps-3" style="width: 50px;">#</th>
+                        <th>Title</th>
+                        <th>Type</th>
+                        <th>Time Est.</th>
+                        <th>Required</th>
+                        <th class="text-end pe-3">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for module in course.modules|sort(attribute='order') %}
+                    <tr>
+                        <td class="ps-3">{{ loop.index }}</td>
+                        <td class="fw-bold">{{ module.title }}</td>
+                        <td>
+                            {% if module.type == 'rich_text' %}
+                            <span class="badge bg-secondary"><i class="fas fa-align-left me-1"></i> Text</span>
+                            {% elif module.type == 'video' %}
+                            <span class="badge bg-primary"><i class="fas fa-video me-1"></i> Video</span>
+                            {% elif module.type == 'youtube' %}
+                            <span class="badge bg-danger"><i class="fab fa-youtube me-1"></i> YouTube</span>
+                            {% elif module.type == 'pdf' %}
+                            <span class="badge bg-danger"><i class="fas fa-file-pdf me-1"></i> PDF</span>
+                            {% elif module.type == 'link' %}
+                            <span class="badge bg-info text-dark"><i class="fas fa-link me-1"></i> Link</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ module.estimated_minutes }} min</td>
+                        <td>
+                            {% if module.is_required %}
+                            <span class="text-success"><i class="fas fa-check"></i></span>
+                            {% else %}
+                            <span class="text-muted"><i class="fas fa-minus"></i></span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end pe-3">
+                            <div class="btn-group">
+                                <a href="{{ url_for('manager.edit_module', id=module.id) }}"
+                                    class="btn btn-sm btn-outline-secondary">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <form action="{{ url_for('manager.delete_module', id=module.id) }}" method="POST"
+                                    class="d-inline"
+                                    data-confirm-message="Are you sure you want to delete this module?">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center py-5 text-muted">
+                            <i class="fas fa-box-open fa-3x mb-3"></i>
+                            <p>No modules yet. Click "Add Module" to start create content.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,6 @@
+Dear {{ user.name }},
+
+Congratulations! You have successfully completed the course "{{ course.title }}".
+
+Great job!
+The Training Team

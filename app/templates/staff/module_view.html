@@ -1,0 +1,141 @@
+{% extends "staff/layout.html" %}
+
+{% block staff_content %}
+<div class="row h-100">
+    <!-- Sidebar -->
+    <div class="col-md-3 border-end bg-white" style="min-height: 80vh;">
+        <h5 class="p-3 border-bottom">{{ course.title }}</h5>
+        <div class="list-group list-group-flush">
+            {% for p in all_progress %}
+            <a href="{{ url_for('staff.module_view', course_id=course.id, module_id=p.module_id) }}"
+                class="list-group-item list-group-item-action {% if p.module_id == module.id %}active bg-td-green border-0{% endif %}">
+                <div class="d-flex align-items-center">
+                    {% if p.status == 'completed' %}
+                    <i
+                        class="fas fa-check-circle {% if p.module_id == module.id %}text-white{% else %}text-success{% endif %} me-2"></i>
+                    {% else %}
+                    <i class="far fa-circle me-2"></i>
+                    {% endif %}
+                    <div class="text-truncate">{{ p.module.title }}</div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        <div class="p-3 mt-auto">
+            <a href="{{ url_for('staff.course_detail', course_id=course.id) }}"
+                class="btn btn-outline-secondary w-100">Back to Course Home</a>
+        </div>
+    </div>
+
+    <!-- Content -->
+    <div class="col-md-9 p-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h3>{{ module.title }}</h3>
+            {% if current_progress.status == 'completed' %}
+            <span class="badge bg-success">Completed</span>
+            {% endif %}
+        </div>
+
+        <div class="module-content bg-white p-4 rounded shadow-sm mb-4">
+            {% if module.type == 'rich_text' %}
+            {{ module.body_html|safe }}
+            {% elif module.type == 'youtube' %}
+            <div class="ratio ratio-16x9">
+                <iframe src="{{ module.content_url|youtube_embed }}" allowfullscreen></iframe>
+            </div>
+            {% elif module.type == 'video' %}
+            <div class="ratio ratio-16x9">
+                <video controls class="w-100 h-100">
+                    <source src="{{ url_for('static', filename=module.file.storage_path) }}"
+                        type="{{ module.file.mime_type }}">
+                    Your browser does not support the video tag.
+                </video>
+            </div>
+            {% elif module.type == 'pdf' %}
+            {% if module.file %}
+            <div style="height: 80vh; width: 100%;">
+                <iframe src="{{ url_for('static', filename=module.file.storage_path) }}" width="100%" height="100%"
+                    style="border: none;">
+                    <p>It appears your web browser doesn't support iframes.</p>
+                </iframe>
+            </div>
+            <div class="text-center mt-2">
+                <a href="{{ url_for('static', filename=module.file.storage_path) }}" target="_blank"
+                    class="btn btn-sm btn-outline-primary">
+                    <i class="fas fa-external-link-alt"></i> Open in New Tab
+                </a>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-file-pdf fa-4x text-danger mb-3"></i>
+                <p class="text-danger">File not found.</p>
+            </div>
+            {% endif %}
+            {% elif module.type == 'link' %}
+            <div class="text-center py-5">
+                <i class="fas fa-external-link-alt fa-4x text-primary mb-3"></i>
+                <br>
+                <a href="{{ module.content_url }}" target="_blank" class="btn btn-primary">Open External Link</a>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="d-flex justify-content-end">
+            <button id="markCompleteBtn" class="btn btn-lg btn-td-green" {% if current_progress.status=='completed'
+                %}disabled{% endif %}>
+                {% if current_progress.status == 'completed' %}
+                Completed
+                {% else %}
+                Mark as Complete
+                {% endif %}
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const enrollmentId = {{ current_progress.enrollment_id }};
+    const moduleId = {{ module.id }};
+    const csrfToken = "{{ csrf_token() if csrf_token else '' }}"; // Need CSRF handling if WTF
+
+    // Heartbeat
+    setInterval(() => {
+        if (document.visibilityState === 'visible') {
+            fetch('/api/heartbeat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    enrollment_id: enrollmentId,
+                    module_id: moduleId
+                })
+            });
+        }
+    }, 30000); // 30 seconds
+
+    // Completion
+    document.getElementById('markCompleteBtn').addEventListener('click', function () {
+        if (this.disabled) return;
+
+        fetch('/api/complete-module', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                enrollment_id: enrollmentId,
+                module_id: moduleId
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                }
+            });
+    });
+</script>
+{% endblock %}

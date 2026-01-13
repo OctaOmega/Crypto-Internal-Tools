@@ -1,0 +1,9 @@
+Dear {{ user.name }},
+
+This is a reminder that the course "{{ course.title }}" is due on {{ course.due_date.strftime('%Y-%m-%d') }}.
+Please ensure you complete it before the deadline.
+
+Link: {{ url_for('staff.course_detail', course_id=course.id, _external=True) }}
+
+Regards,
+The Training Team

@@ -1,0 +1,42 @@
+{% extends "staff/layout.html" %}
+
+{% block staff_content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card shadow-sm">
+            <div class="card-header bg-td-green text-white">
+                <h5 class="mb-0"><i class="fas fa-file-code me-2"></i> JKS to Base64 Converter</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Convert JKS binary file to Base64 string.</p>
+
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="jks_file" class="form-label">Upload JKS File *</label>
+                        <input class="form-control" type="file" id="jks_file" name="jks_file" accept=".jks,.keystore"
+                            required>
+                    </div>
+
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-td-green w-100">Convert</button>
+                    </div>
+                </form>
+
+                {% if result %}
+                <div class="mt-4">
+                    <h6>Result (Base64):</h6>
+                    <div class="bg-light p-3 rounded"
+                        style="word-break: break-all; max-height: 200px; overflow-y: auto;">
+                        <code>{{ result }}</code>
+                    </div>
+                    <button class="btn btn-outline-secondary btn-sm mt-2"
+                        onclick="navigator.clipboard.writeText(`{{ result }}`)">
+                        <i class="fas fa-copy"></i> Copy to Clipboard
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

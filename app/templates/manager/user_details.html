@@ -1,0 +1,78 @@
+{% extends "manager/layout.html" %}
+
+{% block manager_content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">{{ user.name }}</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('manager.edit_user', id=user.id) }}" class="btn btn-sm btn-outline-secondary me-2">
+            <i class="fas fa-edit"></i> Edit Profile
+        </a>
+        <a href="{{ url_for('manager.users') }}" class="btn btn-sm btn-outline-primary">
+            <i class="fas fa-arrow-left"></i> Back to Users
+        </a>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title text-muted">Profile</h5>
+                <p class="card-text">
+                    <strong>Email:</strong> {{ user.email }}<br>
+                    <strong>Role:</strong> <span class="badge bg-secondary">{{ user.role }}</span><br>
+                    <strong>Status:</strong> <span class="badge bg-success">{{ user.status }}</span><br>
+                    <strong>Joined:</strong> {{ user.created_at.strftime('%Y-%m-%d') }}
+                </p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Course Enrollments</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="bg-light">
+                        <tr>
+                            <th class="ps-3">Course</th>
+                            <th>Enrolled</th>
+                            <th>Status</th>
+                            <th>Time Spent</th>
+                            <th>Progress</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for enrollment in enrollments %}
+                        <tr>
+                            <td class="ps-3 fw-bold">{{ enrollment.course.title }}</td>
+                            <td>{{ enrollment.enrolled_at.strftime('%Y-%m-%d') }}</td>
+                            <td>
+                                {% if enrollment.status == 'completed' %}
+                                <span class="badge bg-success">Completed</span>
+                                {% else %}
+                                <span class="badge bg-primary">Active</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ (enrollment.total_seconds / 60)|round|int }} mins</td>
+                            <td>
+                                <div class="progress" style="height: 5px; width: 100px;">
+                                    <div class="progress-bar bg-td-green" role="progressbar"
+                                        style="width: {{ enrollment.progress_percent }}%"></div>
+                                </div>
+                                <small class="text-muted">{{ enrollment.progress_percent }}%</small>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center py-4 text-muted">No enrollments found.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

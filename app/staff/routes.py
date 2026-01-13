@@ -1,0 +1,490 @@
+from flask import render_template, redirect, url_for, flash, abort, request
+from flask_login import login_required, current_user
+from app import db
+from app.staff import bp
+from app.models import Course, Enrollment, EnrollmentStatus, CourseModule, ModuleProgress, ProgressStatus, Tool, Notification
+from app.decorators import staff_required
+from app.staff.forms import ChangePasswordForm
+from datetime import datetime
+import io
+import zipfile
+import base64
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.serialization import pkcs12
+from flask import send_file
+from app.email_utils import send_email
+
+@bp.route('/change-password', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    form = ChangePasswordForm()
+    if form.validate_on_submit():
+        if not current_user.check_password(form.old_password.data):
+            flash('Incorrect current password.', 'danger')
+            return redirect(url_for('staff.change_password'))
+            
+        current_user.set_password(form.new_password.data)
+        db.session.commit()
+        flash('Your password has been updated.', 'success')
+        return redirect(url_for('staff.dashboard'))
+        
+    return render_template('staff/change_password.html', title='Change Password', form=form)
+
+@bp.route('/')
+@bp.route('/dashboard')
+@login_required
+def dashboard():
+    return redirect(url_for('staff.my_trainings'))
+
+@bp.route('/notifications/delete/<int:id>', methods=['POST'])
+@login_required
+def delete_notification(id):
+    notification = Notification.query.get_or_404(id)
+    if notification.user_id != current_user.id:
+        abort(403)
+    
+    db.session.delete(notification)
+    db.session.commit()
+    return redirect(url_for('staff.notifications'))
+
+@bp.route('/notifications')
+@login_required
+def notifications():
+    # Mark all shown as read on visit? Or just show them.
+    notifications = Notification.query.filter_by(user_id=current_user.id).order_by(Notification.created_at.desc()).all()
+    
+    # Optional: Mark as read when viewing the list
+    for n in notifications:
+        if not n.is_read:
+            n.is_read = True
+    db.session.commit()
+    
+    return render_template('notifications.html', title='Notifications', notifications=notifications)
+
+@bp.route('/my-trainings')
+@login_required
+def my_trainings():
+    # Get active enrollments
+    active_enrollments = current_user.enrollments.filter_by(status=EnrollmentStatus.ACTIVE.value).all()
+    completed_enrollments = current_user.enrollments.filter_by(status=EnrollmentStatus.COMPLETED.value).all()
+    
+    return render_template('staff/dashboard.html', 
+                           title='My Trainings', 
+                           active=active_enrollments, 
+                           completed=completed_enrollments,
+                           today=datetime.utcnow())
+
+@bp.route('/catalog')
+@login_required
+def catalog():
+    query = request.args.get('q', '')
+    sort_order = request.args.get('sort', 'title_asc')
+    
+    # Base query for published courses
+    base_query = Course.query.filter_by(status='published')
+    
+    # Search Filter
+    if query:
+        base_query = base_query.filter(
+            (Course.title.ilike(f'%{query}%')) | 
+            (Course.description.ilike(f'%{query}%'))
+        )
+    
+    # Sorting
+    if sort_order == 'newest':
+        base_query = base_query.order_by(Course.created_at.desc())
+    elif sort_order == 'oldest':
+        base_query = base_query.order_by(Course.created_at.asc())
+    elif sort_order == 'title_desc':
+        base_query = base_query.order_by(Course.title.desc())
+    else: # title_asc default
+        base_query = base_query.order_by(Course.title.asc())
+        
+    courses = base_query.all()
+    
+    # Existing enrollment check
+    enrolled_ids = [e.course_id for e in current_user.enrollments.filter_by(status=EnrollmentStatus.ACTIVE.value).all()]
+    completed_ids = [e.course_id for e in current_user.enrollments.filter_by(status=EnrollmentStatus.COMPLETED.value).all()]
+    
+    # Merge lists for checking "Open" state vs "Enroll"
+    all_enrolled_ids = enrolled_ids + completed_ids
+    
+    return render_template('staff/catalog.html', title='Course Catalog', 
+                           courses=courses, 
+                           enrolled_ids=all_enrolled_ids,
+                           query=query,
+                           sort_order=sort_order)
+
+@bp.route('/enroll/<int:course_id>', methods=['POST'])
+@login_required
+def enroll(course_id):
+    course = Course.query.get_or_404(course_id)
+    if course.status != 'published':
+        flash('Course is not available.', 'danger')
+        return redirect(url_for('staff.catalog'))
+        
+    # Check if already enrolled
+    enrollment = Enrollment.query.filter_by(user_id=current_user.id, course_id=course_id).first()
+    
+    if not enrollment:
+        enrollment = Enrollment(user_id=current_user.id, course_id=course_id)
+        db.session.add(enrollment)
+        db.session.commit()
+        
+        # Send Email
+        send_email(
+            subject=f'Enrollment Confirmation: {course.title}',
+            recipients=[current_user.email],
+            text_body=render_template('email/enrollment.txt', user=current_user, course=course),
+            html_body=render_template('email/enrollment.html', user=current_user, course=course)
+        )
+        
+        flash(f'You have enrolled in {course.title}', 'success')
+    else:
+        # If withdrawn, maybe re-activate? For now just say already enrolled
+        if enrollment.status == EnrollmentStatus.WITHDRAWN.value:
+            enrollment.status = EnrollmentStatus.ACTIVE.value
+            db.session.commit()
+            flash(f'You have re-enrolled in {course.title}', 'success')
+        else:
+            flash('You are already enrolled.', 'info')
+        
+    return redirect(url_for('staff.my_trainings'))
+
+@bp.route('/course/<int:course_id>')
+@login_required
+def course_detail(course_id):
+    enrollment = current_user.enrollments.filter_by(course_id=course_id).first_or_404()
+    
+    # Sync: Check if there are new modules added since enrollment or missing progress records
+    existing_module_ids = [p.module_id for p in enrollment.progress_records.all()]
+    all_modules = enrollment.course.modules.all()
+    
+    new_records = []
+    for module in all_modules:
+        if module.id not in existing_module_ids:
+            progress = ModuleProgress(enrollment=enrollment, module_id=module.id, status=ProgressStatus.NOT_STARTED.value)
+            db.session.add(progress)
+            new_records.append(progress)
+    
+    if new_records:
+        db.session.commit()
+    
+    # Needs re-query after commit to ensure relationships are loaded
+    
+    # Get first incomplete module or first module
+    default_module = enrollment.progress_records.filter(ModuleProgress.status != ProgressStatus.COMPLETED.value).first()
+    if not default_module:
+         default_module = enrollment.progress_records.first()
+         
+    # Removed auto-redirect to allow "Start Course" option
+    # if default_module:
+    #    return redirect(url_for('staff.module_view', course_id=course_id, module_id=default_module.module_id))
+    
+    # Fallback if no modules
+    # Fetch progress records ordered by module order
+    progress_records = enrollment.progress_records.join(CourseModule).order_by(CourseModule.order).all()
+    
+    return render_template('staff/course_detail.html', title=enrollment.course.title, enrollment=enrollment, progress_records=progress_records)
+
+@bp.route('/course/<int:course_id>/start', methods=['POST'])
+@login_required
+def start_course(course_id):
+    enrollment = current_user.enrollments.filter_by(course_id=course_id).first_or_404()
+    
+    if not enrollment.started_at:
+        enrollment.started_at = datetime.utcnow()
+        db.session.commit()
+        
+    # Redirect to first module
+    first_module = enrollment.course.modules.order_by(CourseModule.order).first()
+    if first_module:
+        return redirect(url_for('staff.module_view', course_id=course_id, module_id=first_module.id))
+    
+    return redirect(url_for('staff.course_detail', course_id=course_id))
+
+@bp.route('/course/<int:course_id>/module/<int:module_id>')
+@login_required
+def module_view(course_id, module_id):
+    enrollment = current_user.enrollments.filter_by(course_id=course_id).first_or_404()
+    module = CourseModule.query.get_or_404(module_id)
+    
+    if module.course_id != course_id:
+        abort(404)
+        
+    progress = ModuleProgress.query.filter_by(enrollment_id=enrollment.id, module_id=module_id).first()
+    
+    # Mark as in-progress if not started
+    if progress.status == ProgressStatus.NOT_STARTED.value:
+        progress.status = ProgressStatus.IN_PROGRESS.value
+        progress.started_at = datetime.utcnow()
+        db.session.commit()
+        
+    all_progress = enrollment.progress_records.join(CourseModule).order_by(CourseModule.order).all()
+    
+    return render_template('staff/module_view.html', 
+                           title=module.title, 
+                           course=enrollment.course, 
+                           module=module, 
+                           current_progress=progress,
+                           all_progress=all_progress)
+
+@bp.route('/tools')
+@login_required
+def tools():
+    return render_template('staff/tools.html', title='Internal Tools')
+
+# --- News Routes ---
+from app.models import NewsItem
+
+@bp.route('/news')
+@login_required
+def news():
+    query = request.args.get('q', '')
+    sort_order = request.args.get('sort', 'desc')
+    
+    base_query = NewsItem.query.filter_by(is_published=True)
+    
+    if query:
+        base_query = base_query.filter(NewsItem.title.ilike(f'%{query}%'))
+    
+    if sort_order == 'asc':
+        base_query = base_query.order_by(NewsItem.created_at.asc())
+    else:
+        base_query = base_query.order_by(NewsItem.created_at.desc())
+        
+    news_items = base_query.all()
+    return render_template('staff/news_list.html', title='Crypto News', news_items=news_items, query=query, sort_order=sort_order)
+
+@bp.route('/news/<int:id>')
+@login_required
+def news_detail(id):
+    news = NewsItem.query.get_or_404(id)
+    if not news.is_published:
+        flash('This news item is not available.', 'danger')
+        return redirect(url_for('staff.news'))
+    return render_template('staff/news_detail.html', title=news.title, news=news)
+
+
+@bp.route('/tools/csr', methods=['GET', 'POST'])
+@login_required
+def tool_csr():
+    result = None
+    error = None
+    if request.method == 'POST':
+        csr_data = request.form.get('csr_content')
+        if csr_data:
+            try:
+                csr = x509.load_pem_x509_csr(csr_data.encode(), default_backend())
+                result = {
+                    'subject': csr.subject.rfc4514_string(),
+                    'public_key_type': csr.public_key().__class__.__name__,
+                    'signature_algorithm': csr.signature_algorithm_oid._name,
+                    'extensions': [ext.oid._name for ext in csr.extensions]
+                }
+            except Exception as e:
+                error = f"Invalid CSR Data: {str(e)}"
+    
+    return render_template('staff/tool_csr.html', title='CSR Decoder', result=result, error=error)
+
+@bp.route('/tools/x509', methods=['GET', 'POST'])
+@login_required
+def tool_x509():
+    result = None
+    error = None
+    if request.method == 'POST':
+        cert_data = request.form.get('cert_content')
+        if cert_data:
+            try:
+                cert = x509.load_pem_x509_certificate(cert_data.encode(), default_backend())
+                result = {
+                    'subject': cert.subject.rfc4514_string(),
+                    'issuer': cert.issuer.rfc4514_string(),
+                    'serial_number': cert.serial_number,
+                    'not_valid_before': cert.not_valid_before,
+                    'not_valid_after': cert.not_valid_after,
+                    'version': cert.version.name,
+                    'signature_algorithm': cert.signature_algorithm_oid._name
+                }
+            except Exception as e:
+                error = f"Invalid Certificate Data: {str(e)}"
+    
+    return render_template('staff/tool_x509.html', title='Certificate Decoder', result=result, error=error)
+
+@bp.route('/tools/csr-generator', methods=['GET', 'POST'])
+@login_required
+def tool_csr_generator():
+    if request.method == 'POST':
+        try:
+            # Gather inputs
+            cn = request.form.get('cn')
+            org = request.form.get('org')
+            ou = request.form.get('ou')
+            city = request.form.get('city')
+            state = request.form.get('state')
+            country = request.form.get('country')
+            password = request.form.get('password')
+            sans_input = request.form.get('sans', '')
+            
+            if not cn:
+                flash("Common Name (CN) is required", "danger")
+                return render_template('staff/tool_csr_generator.html', title='CSR Generator')
+
+            # Generate Key
+            key = rsa.generate_private_key(
+                public_exponent=65537,
+                key_size=2048,
+                backend=default_backend()
+            )
+
+            # Build Subject
+            subject_attributes = [x509.NameAttribute(x509.NameOID.COMMON_NAME, cn)]
+            if org: subject_attributes.append(x509.NameAttribute(x509.NameOID.ORGANIZATION_NAME, org))
+            if ou: subject_attributes.append(x509.NameAttribute(x509.NameOID.ORGANIZATIONAL_UNIT_NAME, ou))
+            if city: subject_attributes.append(x509.NameAttribute(x509.NameOID.LOCALITY_NAME, city))
+            if state: subject_attributes.append(x509.NameAttribute(x509.NameOID.STATE_OR_PROVINCE_NAME, state))
+            if country: subject_attributes.append(x509.NameAttribute(x509.NameOID.COUNTRY_NAME, country))
+            
+            subject = x509.Name(subject_attributes)
+            
+            # Build Builder
+            builder = x509.CertificateSigningRequestBuilder().subject_name(subject)
+            
+            # SANs
+            if sans_input:
+                san_list = []
+                for san in sans_input.split(','):
+                    san = san.strip()
+                    if san:
+                         san_list.append(x509.DNSName(san))
+                if san_list:
+                    builder = builder.add_extension(
+                        x509.SubjectAlternativeName(san_list),
+                        critical=False
+                    )
+
+            # Sign
+            csr = builder.sign(key, hashes.SHA256(), default_backend())
+
+            # Export Key
+            encryption = serialization.NoEncryption()
+            if password:
+                encryption = serialization.BestAvailableEncryption(password.encode())
+            
+            key_pem = key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.TraditionalOpenSSL,
+                encryption_algorithm=encryption
+            )
+            
+            csr_pem = csr.public_bytes(serialization.Encoding.PEM)
+
+            # Zip
+            memory_file = io.BytesIO()
+            with zipfile.ZipFile(memory_file, 'w') as zf:
+                zf.writestr('private.key', key_pem)
+                zf.writestr('request.csr', csr_pem)
+            
+            memory_file.seek(0)
+            return send_file(
+                memory_file,
+                download_name=f'{cn}_csr_bundle.zip',
+                as_attachment=True
+            )
+
+        except Exception as e:
+            flash(f"Error generating CSR: {str(e)}", "danger")
+
+    return render_template('staff/tool_csr_generator.html', title='CSR Generator')
+
+@bp.route('/tools/pfx-split', methods=['GET', 'POST'])
+@login_required
+def tool_pfx_split():
+    if request.method == 'POST':
+        try:
+            pfx_file = request.files.get('pfx_file')
+            password = request.form.get('password')
+            output_format = request.form.get('format', 'crt') # cer or crt
+            custom_name = request.form.get('name')
+            
+            if not pfx_file:
+                flash("PFX file is required", "danger")
+                return render_template('staff/tool_pfx_split.html', title='Split PFX/P12')
+                
+            pfx_data = pfx_file.read()
+            
+            # Load PFX
+            private_key, certificate, additional_certificates = pkcs12.load_key_and_certificates(
+                pfx_data,
+                password.encode() if password else None,
+                backend=default_backend()
+            )
+            
+            # Determine filenames
+            if not custom_name:
+                custom_name = certificate.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)[0].value
+                # Sanitize filename
+                custom_name = "".join(x for x in custom_name if x.isalnum() or x in "._- ")
+
+            cert_ext = output_format
+            
+            # Prepare ZIP
+            memory_file = io.BytesIO()
+            with zipfile.ZipFile(memory_file, 'w') as zf:
+                # Private Key
+                if private_key:
+                    key_pem = private_key.private_bytes(
+                        encoding=serialization.Encoding.PEM,
+                        format=serialization.PrivateFormat.TraditionalOpenSSL,
+                        encryption_algorithm=serialization.NoEncryption()
+                    )
+                    zf.writestr(f'{custom_name}.key', key_pem)
+                
+                # Certificate
+                if certificate:
+                    cert_pem = certificate.public_bytes(serialization.Encoding.PEM)
+                    zf.writestr(f'{custom_name}.{cert_ext}', cert_pem)
+                    
+                # Signers / Additional Certs
+                signers_file = request.files.get('signers_file')
+                if signers_file:
+                    signers_data = signers_file.read()
+                    zf.writestr('signers.pem', signers_data)
+                elif additional_certificates:
+                    # Also include bundled certs from PFX if any
+                    chain_pem = b""
+                    for cert in additional_certificates:
+                         chain_pem += cert.public_bytes(serialization.Encoding.PEM)
+                    zf.writestr('chain.pem', chain_pem)
+
+            memory_file.seek(0)
+            return send_file(
+                memory_file,
+                download_name=f'{custom_name}_split.zip',
+                as_attachment=True
+            )
+
+        except Exception as e:
+            flash(f"Error splitting PFX: {str(e)}", "danger")
+
+    return render_template('staff/tool_pfx_split.html', title='Split PFX/P12')
+
+@bp.route('/tools/jks-base64', methods=['GET', 'POST'])
+@login_required
+def tool_jks_base64():
+    result = None
+    if request.method == 'POST':
+        jks_file = request.files.get('jks_file')
+        if jks_file:
+            try:
+                file_data = jks_file.read()
+                # mimic "cat JKS | base64 | tr -d '\n'"
+                b64_data = base64.b64encode(file_data).decode('utf-8')
+                result = b64_data
+            except Exception as e:
+                flash(f"Error converting file: {str(e)}", "danger")
+    
+    return render_template('staff/tool_jks_base64.html', title='JKS to Base64', result=result)

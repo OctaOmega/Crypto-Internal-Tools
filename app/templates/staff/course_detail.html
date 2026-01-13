@@ -1,0 +1,86 @@
+{% extends "staff/layout.html" %}
+
+{% block staff_content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card shadow-sm">
+            <div class="card-body p-5">
+                <h1 class="display-5 fw-bold text-td-green">{{ enrollment.course.title }}</h1>
+                <p class="lead">{{ enrollment.course.description }}</p>
+
+
+                <div class="d-grid gap-2 mb-4">
+                    {% if enrollment.started_at %}
+                    {% set next_module = enrollment.progress_records.filter_by(status='not_started').first() %}
+                    {% if not next_module %}
+                    {% set next_module = enrollment.progress_records.filter_by(status='in_progress').first() %}
+                    {% endif %}
+                    {% if not next_module %}
+                    {% set next_module = enrollment.progress_records.first() %}
+                    {% endif %}
+
+                    {% if next_module %}
+                    <a href="{{ url_for('staff.module_view', course_id=enrollment.course.id, module_id=next_module.module_id) }}"
+                        class="btn btn-lg btn-td-green">
+                        <i class="fas fa-play me-2"></i> Continue Course
+                    </a>
+                    {% endif %}
+                    {% else %}
+                    <form action="{{ url_for('staff.start_course', course_id=enrollment.course_id) }}" method="POST">
+                        <button type="submit" class="btn btn-lg btn-td-green w-100">
+                            <i class="fas fa-play me-2"></i> Start Course
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+                <hr>
+
+                <h4>Modules</h4>
+                <div class="list-group list-group-flush mb-4">
+                    {% for p in progress_records %}
+                    {% if enrollment.started_at %}
+                    <a href="{{ url_for('staff.module_view', course_id=enrollment.course_id, module_id=p.module_id) }}"
+                        class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                        {% else %}
+                        <div
+                            class="list-group-item d-flex justify-content-between align-items-center bg-light text-muted">
+                            {% endif %}
+
+                            <div class="d-flex align-items-center">
+                                {% if p.status == 'completed' %}
+                                <i class="fas fa-check-circle text-success me-3"></i>
+                                {% elif p.status == 'in_progress' %}
+                                <i class="fas fa-adjust text-primary me-3"></i>
+                                {% else %}
+                                <i class="far fa-circle text-muted me-3"></i>
+                                {% endif %}
+
+                                <div>
+                                    <span class="{{ 'fw-bold' if p.status == 'in_progress' else '' }}">{{ p.module.title
+                                        }}</span>
+                                    <br>
+                                    <small
+                                        class="{{ 'text-muted' if enrollment.started_at else 'text-muted opacity-50' }}">{{
+                                        p.module.estimated_minutes }} mins • {{
+                                        p.module.type|replace('_', ' ')|title }}</small>
+                                </div>
+                            </div>
+
+                            {% if p.status == 'completed' %}
+                            <span class="badge bg-success">Completed</span>
+                            {% endif %}
+
+                            {% if enrollment.started_at %}
+                    </a>
+                    {% else %}
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+
+            <a href="{{ url_for('staff.my_trainings') }}" class="btn btn-outline-secondary">Back to Dashboard</a>
+        </div>
+    </div>
+</div>
+</div>
+{% endblock %}

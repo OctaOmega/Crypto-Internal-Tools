@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div id="sidebarMenu" class="col-md-2 d-md-block bg-light sidebar collapse" style="min-height: calc(100vh - 56px);">
+        <div class="position-sticky pt-3">
+            <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-muted">
+                <span>Quick Actions</span>
+            </h6>
+            <ul class="nav flex-column mb-2">
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('manager.new_course') }}">
+                        <i class="fas fa-plus-circle me-2"></i> Create Course
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('manager.news_list') }}">
+                        <i class="fas fa-newspaper me-2"></i> Crypto News
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('manager.new_user') }}">
+                        <i class="fas fa-user-plus me-2"></i> Onboard User
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('manager.new_group') }}">
+                        <i class="fas fa-users me-2"></i> New Group
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('manager.export_report') }}">
+                        <i class="fas fa-file-download me-2"></i> Export Report
+                    </a>
+                </li>
+                <li class="nav-item mt-3">
+                    <h6 class="sidebar-heading px-3 mt-4 mb-1 text-muted text-uppercase fs-7 fw-bold">
+                        <span>Utilities</span>
+                    </h6>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('staff.tools') }}">
+                        <i class="fas fa-toolbox me-2"></i> Internal Tools
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <main id="mainContent" class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+        {% block manager_content %}{% endblock %}
+    </main>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const sidebarToggle = document.getElementById('sidebarToggle');
+        if (sidebarToggle) {
+            sidebarToggle.addEventListener('click', function (event) {
+                event.preventDefault();
+                const sidebar = document.getElementById('sidebarMenu');
+                const main = document.getElementById('mainContent');
+
+                if (sidebar) {
+                    sidebar.classList.toggle('d-none');
+                    sidebar.classList.toggle('d-md-block');
+
+                    if (sidebar.classList.contains('d-none')) {
+                        main.classList.remove('col-md-9', 'col-lg-10');
+                        main.classList.add('col-md-12');
+                    } else {
+                        main.classList.add('col-md-9', 'col-lg-10');
+                        main.classList.remove('col-md-12');
+                    }
+                }
+            });
+        }
+    });
+</script>
+{% endblock %}

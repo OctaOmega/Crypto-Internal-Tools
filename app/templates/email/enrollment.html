@@ -1,0 +1,5 @@
+<p>Dear {{ user.name }},</p>
+<p>You have successfully enrolled in the course <b>{{ course.title }}</b>.</p>
+<p>You can access the course <a
+        href="{{ url_for('staff.course_detail', course_id=course.id, _external=True) }}">here</a>.</p>
+<p>Happy Learning!<br>The Training Team</p>

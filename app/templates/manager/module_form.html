@@ -1,0 +1,117 @@
+{% extends "manager/layout.html" %}
+
+{% block manager_content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">{{ title }}</h1>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+                    {{ form.hidden_tag() }}
+
+                    <div class="mb-3">
+                        <label class="form-label">{{ form.title.label }}</label>
+                        {{ form.title(class="form-control") }}
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ form.type.label }}</label>
+                            {{ form.type(class="form-select", id="moduleType") }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">{{ form.estimated_minutes.label }}</label>
+                            {{ form.estimated_minutes(class="form-control") }}
+                        </div>
+                    </div>
+
+                    <!-- Dynamic Fields based on Type -->
+                    <div id="urlField" class="mb-3 d-none">
+                        <label class="form-label">{{ form.content_url.label }}</label>
+                        {{ form.content_url(class="form-control", placeholder="https://...") }}
+                        <div class="form-text">For YouTube, use the full URL (e.g. video link). For External Links,
+                            ensure it starts with http/https.</div>
+                    </div>
+
+                    <div id="fileField" class="mb-3 d-none">
+                        <label class="form-label">{{ form.file.label }}</label>
+                        {% if module and module.file %}
+                        <div class="alert alert-secondary d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="fas fa-file me-2"></i>
+                                <strong>{{ module.file.filename }}</strong>
+                                <span class="text-muted ms-2">({{ (module.file.size / 1024 / 1024)|round(2) }}
+                                    MB)</span>
+                            </div>
+                            <button type="submit" class="btn btn-outline-danger"
+                                data-confirm-message="Delete this file?">
+                                <i class="fas fa-trash"></i> Delete File
+                            </button>
+                        </div>
+                        {% else %}
+                        {{ form.file(class="form-control") }}
+                        <div class="form-text">Upload PDF documents or MP4/MOV videos. Max size 500MB. One file per
+                            module.</div>
+                        {% endif %}
+                    </div>
+
+                    <div id="bodyField" class="mb-3 d-none">
+                        <label class="form-label">{{ form.body_html.label }}</label>
+                        {{ form.body_html(class="form-control", rows="10") }}
+                        <div class="form-text">Use HTML for formatting. Safe tags allowed.</div>
+                    </div>
+
+                    <div class="mb-3 form-check">
+                        {{ form.is_required(class="form-check-input") }}
+                        <label class="form-check-label">{{ form.is_required.label }}</label>
+                    </div>
+
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{{ url_for('manager.course_modules', id=course.id) }}"
+                            class="btn btn-outline-secondary me-md-2">Cancel</a>
+                        {{ form.submit(class="btn btn-primary") }}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if module and module.id %}
+<form id="deleteFileForm" action="{{ url_for('manager.delete_module_file', id=module.id) }}" method="POST"
+    style="display: none;"></form>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const typeSelect = document.getElementById('moduleType');
+        const urlField = document.getElementById('urlField');
+        const fileField = document.getElementById('fileField');
+        const bodyField = document.getElementById('bodyField');
+
+        function updateFields() {
+            const val = typeSelect.value;
+            // Hide all first
+            urlField.classList.add('d-none');
+            fileField.classList.add('d-none');
+            bodyField.classList.add('d-none');
+
+            if (val === 'rich_text') {
+                bodyField.classList.remove('d-none');
+            } else if (val === 'youtube' || val === 'link') {
+                urlField.classList.remove('d-none');
+            } else if (val === 'video' || val === 'pdf') {
+                fileField.classList.remove('d-none');
+            }
+        }
+
+        typeSelect.addEventListener('change', updateFields);
+        updateFields(); // Init
+    });
+</script>
+{% endblock %}

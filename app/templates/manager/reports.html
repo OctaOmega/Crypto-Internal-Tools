@@ -1,0 +1,315 @@
+{% extends "manager/layout.html" %}
+
+{% block manager_content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Reports</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <button onclick="exportCurrentGrid()" class="btn btn-td-green">
+            <i class="fas fa-file-excel"></i> Export Excel
+        </button>
+    </div>
+</div>
+
+<!-- Tabs -->
+<ul class="nav nav-tabs mb-4" id="reportTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="user-tab" data-bs-toggle="tab" data-bs-target="#user-report" type="button"
+            role="tab">User Entrollment Report</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="course-tab" data-bs-toggle="tab" data-bs-target="#course-report" type="button"
+            role="tab">Course Statistics Report</button>
+    </li>
+</ul>
+
+<div class="tab-content" id="reportTabContent">
+    <!-- User Report Tab -->
+    <div class="tab-pane fade show active" id="user-report" role="tabpanel">
+        <!-- User Charts -->
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <h6 class="card-title text-center mb-3">Enrollment Status</h6>
+                        <canvas id="userStatusChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <h6 class="card-title text-center mb-3">Days to Complete (Avg)</h6>
+                        <div class="d-flex align-items-center justify-content-center h-75">
+                            <h1 class="display-4 fw-bold text-td-green" id="avgDaysDisplay">-</h1>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <h6 class="card-title text-center mb-3">Top Training Groups</h6>
+                        <canvas id="userGroupChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- User Grid -->
+        <div class="card shadow-sm">
+            <div class="card-body p-0">
+                <div id="userGrid" style="height: 600px; width: 100%;" class="ag-theme-alpine"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Course Report Tab -->
+    <div class="tab-pane fade" id="course-report" role="tabpanel">
+        <!-- Course Charts -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <h6 class="card-title text-center mb-3">Courses by Training Group</h6>
+                        <canvas id="courseGroupDistChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body">
+                        <h6 class="card-title text-center mb-3">Top 5 Courses by Completion Rate</h6>
+                        <canvas id="courseCompletionChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Course Grid -->
+        <div class="card shadow-sm">
+            <div class="card-body p-0">
+                <div id="courseGrid" style="height: 600px; width: 100%;" class="ag-theme-alpine"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- AG Grid & Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/ag-grid-community/dist/ag-grid-community.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    let userGridApi;
+    let courseGridApi;
+    let activeTab = 'user'; // 'user' or 'course'
+
+    // Store Chart Instances to destroy/update
+    let charts = {};
+
+    document.addEventListener('DOMContentLoaded', function () {
+        initUserReport();
+
+        // Tab Listener to lazy load or resize
+        const tabEls = document.querySelectorAll('button[data-bs-toggle="tab"]');
+        tabEls.forEach(tab => {
+            tab.addEventListener('shown.bs.tab', function (event) {
+                if (event.target.id === 'user-tab') {
+                    activeTab = 'user';
+                    // Resize grid if needed
+                } else {
+                    activeTab = 'course';
+                    if (!courseGridApi) {
+                        initCourseReport();
+                    }
+                }
+            })
+        });
+    });
+
+    function exportCurrentGrid() {
+        if (activeTab === 'user' && userGridApi) {
+            userGridApi.exportDataAsCsv({ fileName: 'User_Enrollment_Report.csv' });
+        } else if (activeTab === 'course' && courseGridApi) {
+            courseGridApi.exportDataAsCsv({ fileName: 'Course_Statistics_Report.csv' });
+        }
+    }
+
+    // --- User Report Logic ---
+    function initUserReport() {
+        const gridOptions = {
+            columnDefs: [
+                { field: "user_name", headerName: "Name", sortable: true, filter: true, pinned: 'left' },
+                { field: "user_email", headerName: "Email", sortable: true, filter: true },
+                { field: "user_groups", headerName: "User Group", sortable: true, filter: true },
+                { field: "course_title", headerName: "Course", sortable: true, filter: true, width: 200 },
+                { field: "training_group", headerName: "Training Group", sortable: true, filter: true },
+                { field: "status", headerName: "Status", sortable: true, filter: true },
+                { field: "enrolled_date", headerName: "Enrolled Date", sortable: true, filter: 'agDateColumnFilter' },
+                { field: "completed_date", headerName: "Completed Date", sortable: true, filter: 'agDateColumnFilter' },
+                { field: "days_to_complete", headerName: "Days to Complete", sortable: true, filter: 'agNumberColumnFilter' },
+                { field: "time_spent_mins", headerName: "Time (Mins)", sortable: true, filter: 'agNumberColumnFilter' }
+            ],
+            defaultColDef: {
+                flex: 1,
+                minWidth: 150,
+                resizable: true,
+            },
+            pagination: true,
+            paginationPageSize: 20,
+            rowData: []
+        };
+
+        const gridDiv = document.querySelector('#userGrid');
+        userGridApi = agGrid.createGrid(gridDiv, gridOptions);
+
+        fetch('{{ url_for("manager.reports_data_users") }}')
+            .then(response => response.json())
+            .then(data => {
+                userGridApi.setGridOption('rowData', data.data);
+                updateUserCharts(data.data);
+            });
+    }
+
+    function updateUserCharts(data) {
+        // Status Distribution
+        const statusCounts = {};
+        let totalDays = 0;
+        let completedCountWithDays = 0;
+        const groupCounts = {};
+
+        data.forEach(row => {
+            // Status
+            statusCounts[row.status] = (statusCounts[row.status] || 0) + 1;
+
+            // Days
+            if (row.days_to_complete !== null) {
+                totalDays += row.days_to_complete;
+                completedCountWithDays++;
+            }
+
+            // Group (Training Group)
+            const grp = row.training_group || 'None';
+            groupCounts[grp] = (groupCounts[grp] || 0) + 1;
+        });
+
+        // Update Avg Days Display
+        const avg = completedCountWithDays > 0 ? Math.round(totalDays / completedCountWithDays) : 0;
+        document.getElementById('avgDaysDisplay').textContent = avg + " Days";
+
+        // Chart 1: Status
+        createDoughnutChart('userStatusChart', Object.keys(statusCounts), Object.values(statusCounts), 'Enrollment Status');
+
+        // Chart 2: Top Groups
+        // Sort and take top 5
+        const sortedGroups = Object.entries(groupCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+        createDoughnutChart('userGroupChart', sortedGroups.map(x => x[0]), sortedGroups.map(x => x[1]), 'Top Training Groups');
+    }
+
+
+    // --- Course Report Logic ---
+    function initCourseReport() {
+        const gridOptions = {
+            columnDefs: [
+                { field: "course_title", headerName: "Course Title", sortable: true, filter: true, pinned: 'left', width: 250 },
+                { field: "training_group", headerName: "Training Group", sortable: true, filter: true },
+                { field: "visible_groups", headerName: "Visible To", sortable: true, filter: true },
+                { field: "created_at", headerName: "Published Date", sortable: true, filter: 'agDateColumnFilter' },
+                { field: "status", headerName: "Status", sortable: true, filter: true },
+                { field: "enrolled_count", headerName: "Enrolled Users", sortable: true, filter: 'agNumberColumnFilter' },
+                { field: "completed_count", headerName: "Completed Users", sortable: true, filter: 'agNumberColumnFilter' },
+                {
+                    field: "completion_rate", headerName: "Completion Rate (%)", sortable: true, filter: 'agNumberColumnFilter',
+                    cellStyle: params => params.value > 80 ? { color: 'green', fontWeight: 'bold' } : null
+                }
+            ],
+            defaultColDef: {
+                flex: 1,
+                minWidth: 130,
+                resizable: true,
+            },
+            pagination: true,
+            paginationPageSize: 20,
+            rowData: []
+        };
+
+        const gridDiv = document.querySelector('#courseGrid');
+        courseGridApi = agGrid.createGrid(gridDiv, gridOptions);
+
+        fetch('{{ url_for("manager.reports_data_courses") }}')
+            .then(response => response.json())
+            .then(data => {
+                courseGridApi.setGridOption('rowData', data.data);
+                updateCourseCharts(data.data);
+            });
+    }
+
+    function updateCourseCharts(data) {
+        const groupCounts = {};
+
+        data.forEach(row => {
+            const grp = row.training_group || 'None';
+            groupCounts[grp] = (groupCounts[grp] || 0) + 1;
+        });
+
+        createDoughnutChart('courseGroupDistChart', Object.keys(groupCounts), Object.values(groupCounts), 'Courses by Group');
+
+        // Top 5 Completion Rate
+        const topCourses = [...data].sort((a, b) => b.completion_rate - a.completion_rate).slice(0, 5);
+
+        const ctx = document.getElementById('courseCompletionChart').getContext('2d');
+        charts['courseCompletionChart'] = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: topCourses.map(x => x.course_title.substring(0, 20) + '...'),
+                datasets: [{
+                    label: 'Completion Rate (%)',
+                    data: topCourses.map(x => x.completion_rate),
+                    backgroundColor: '#008a00'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true, max: 100 }
+                }
+            }
+        });
+    }
+
+
+    // --- Helper ---
+    function createDoughnutChart(canvasId, labels, data, label) {
+        const ctx = document.getElementById(canvasId).getContext('2d');
+
+        if (charts[canvasId]) {
+            charts[canvasId].destroy();
+        }
+
+        charts[canvasId] = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: label,
+                    data: data,
+                    backgroundColor: [
+                        '#008a00', '#28a745', '#5cd65c', '#8add8a', '#bbf0bb', '#e6f4e6'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'right' }
+                }
+            }
+        });
+    }
+
+</script>
+{% endblock %}

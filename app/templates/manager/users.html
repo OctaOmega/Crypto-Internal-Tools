@@ -1,0 +1,68 @@
+{% extends "manager/layout.html" %}
+
+{% block manager_content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Manage Users</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('manager.new_user') }}" class="btn btn-td-green">
+            <i class="fas fa-user-plus"></i> Onboard User
+        </a>
+    </div>
+</div>
+
+<div class="table-responsive bg-white rounded shadow-sm">
+    <table class="table table-hover mb-0">
+        <thead class="bg-light">
+            <tr>
+                <th scope="col" class="ps-4">Name</th>
+                <th scope="col">Email</th>
+                <th scope="col">Role</th>
+                <th scope="col">Groups</th>
+                <th scope="col">Status</th>
+                <th scope="col" class="text-end pe-4">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td class="ps-4 fw-bold">
+                    <a href="{{ url_for('manager.user_details', id=user.id) }}"
+                        class="text-decoration-none text-dark hover-shadow">
+                        {{ user.name }}
+                    </a>
+                </td>
+                <td>{{ user.email }}</td>
+                <td>
+                    {% if user.role == 'manager' %}
+                    <span class="badge bg-primary">Manager</span>
+                    {% else %}
+                    <span class="badge bg-secondary">Staff</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% for group in user.groups %}
+                    <span class="badge bg-light text-dark border">{{ group.name }}</span>
+                    {% endfor %}
+                </td>
+                <td><span class="badge bg-success">{{ user.status }}</span></td>
+                <td class="text-end pe-4">
+                    <div class="btn-group">
+                        <a href="{{ url_for('manager.edit_user', id=user.id) }}"
+                            class="btn btn-sm btn-link text-muted"><i class="fas fa-edit"></i></a>
+
+                        {% if current_user.role == 'admin' and user.id != current_user.id %}
+                        <form action="{{ url_for('manager.delete_user', id=user.id) }}" method="POST" class="d-inline"
+                            data-confirm-message="Are you sure? This will delete the user and all their progress data.">
+                            <button type="submit" class="btn btn-sm btn-link text-danger border-0 p-0 ms-2">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

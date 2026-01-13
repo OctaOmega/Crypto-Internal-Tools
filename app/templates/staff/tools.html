@@ -1,0 +1,91 @@
+{% extends "staff/layout.html" %}
+
+{% block staff_content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="h2 border-bottom pb-2">Internal Tools</h1>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow-sm hover-shadow">
+            <div class="card-body text-center">
+                <i class="fas fa-key fa-3x text-td-green mb-3"></i>
+                <h5 class="card-title">CSR Decoder</h5>
+                <p class="card-text text-muted">Decode and verify Certificate Signing Requests (CSRs).</p>
+                <a href="{{ url_for('staff.tool_csr') }}" class="btn btn-outline-success stretched-link">Open Tool</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow-sm hover-shadow">
+            <div class="card-body text-center">
+                <i class="fas fa-certificate fa-3x text-primary mb-3"></i>
+                <h5 class="card-title">Certificate Decoder</h5>
+                <p class="card-text text-muted">Decode X.509 Certificates and view details.</p>
+                <a href="{{ url_for('staff.tool_x509') }}" class="btn btn-outline-primary stretched-link">Open Tool</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Tools -->
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow-sm hover-shadow">
+            <div class="card-body text-center">
+                <i class="fas fa-file-signature fa-3x text-td-green mb-3"></i>
+                <h5 class="card-title">CSR Generator</h5>
+                <p class="card-text text-muted">Generate CSRs and Private Keys.</p>
+                <a href="{{ url_for('staff.tool_csr_generator') }}" class="btn btn-outline-success stretched-link">Open
+                    Tool</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow-sm hover-shadow">
+            <div class="card-body text-center">
+                <i class="fas fa-cut fa-3x text-warning mb-3"></i>
+                <h5 class="card-title">Split PFX/P12</h5>
+                <p class="card-text text-muted">Extract Certs and Keys from PFX files.</p>
+                <a href="{{ url_for('staff.tool_pfx_split') }}" class="btn btn-outline-warning stretched-link">Open
+                    Tool</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow-sm hover-shadow">
+            <div class="card-body text-center">
+                <i class="fas fa-code fa-3x text-info mb-3"></i>
+                <h5 class="card-title">JKS to Base64</h5>
+                <p class="card-text text-muted">Convert JKS binary file to Base64 string.</p>
+                <a href="{{ url_for('staff.tool_jks_base64') }}" class="btn btn-outline-info stretched-link">Open
+                    Tool</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow-sm text-center bg-light">
+            <div class="card-body text-center opacity-75">
+                <i class="fas fa-folder-plus fa-3x text-secondary mb-3"></i>
+                <h5 class="card-title">JKS Creator</h5>
+                <p class="card-text text-muted">Create Java KeyStores (Coming Soon).</p>
+                <button class="btn btn-outline-secondary disabled">Open Tool</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card h-100 shadow-sm text-center bg-light">
+            <div class="card-body text-center opacity-75">
+                <i class="fas fa-shield-alt fa-3x text-secondary mb-3"></i>
+                <h5 class="card-title">Safety Net</h5>
+                <p class="card-text text-muted">Safety checks and validation (Coming Soon).</p>
+                <button class="btn btn-outline-secondary disabled">Open Tool</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
