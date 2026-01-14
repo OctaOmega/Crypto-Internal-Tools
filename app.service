@@ -4,17 +4,16 @@ After=network.target
 
 [Service]
 # Service User configuration
-User=your_user
-Group=your_group
+User=wsl2user
+Group=wsl2user
 
 # Directory configuration
-WorkingDirectory=/path/to/your/app
-Environment="PATH=/path/to/your/app/venv/bin"
+WorkingDirectory=/home/wsl2user/crypto_app
+Environment="PATH=/home/wsl2user/crypto_app/venv/bin"
 
 # ExecStart command
-# This assumes a virtual environment 'venv' is used.
-# Adjust the path to gunicorn setup accordingly.
-ExecStart=/path/to/your/app/venv/bin/gunicorn -c gunicorn_config.py wsgi:app
+# Using --access-logfile and --error-logfile to override config and use /var/log/crypto_app/
+ExecStart=/home/wsl2user/crypto_app/venv/bin/gunicorn -c /home/wsl2user/crypto_app/gunicorn_config.py --access-logfile /var/log/crypto_app/access.log --error-logfile /var/log/crypto_app/error.log wsgi:app
 
 # Restart configuration
 Restart=always

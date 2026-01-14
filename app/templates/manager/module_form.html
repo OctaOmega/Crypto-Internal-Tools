@@ -4,6 +4,8 @@
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
     <h1 class="h2">{{ title }}</h1>
 </div>
+<!-- Quill Theme -->
+<link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
 
 <div class="row justify-content-center">
     <div class="col-md-8">
@@ -60,8 +62,11 @@
 
                     <div id="bodyField" class="mb-3 d-none">
                         <label class="form-label">{{ form.body_html.label }}</label>
-                        {{ form.body_html(class="form-control", rows="10") }}
-                        <div class="form-text">Use HTML for formatting. Safe tags allowed.</div>
+                        <!-- Hidden Input for Form Submission -->
+                        {{ form.body_html(class="d-none", id="hiddenBodyHtml") }}
+                        <!-- Quill Editor Container -->
+                        <div id="editor-container" style="height: 300px; background: white;"></div>
+                        <div class="form-text">Use the editor above to format your content.</div>
                     </div>
 
                     <div class="mb-3 form-check">
@@ -86,13 +91,46 @@
 {% endif %}
 {% endblock %}
 
+
+
 {% block scripts %}
+<!-- Quill JS -->
+<script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         const typeSelect = document.getElementById('moduleType');
         const urlField = document.getElementById('urlField');
         const fileField = document.getElementById('fileField');
         const bodyField = document.getElementById('bodyField');
+        const form = document.querySelector('form');
+
+        // Initialize Quill
+        var quill = new Quill('#editor-container', {
+            theme: 'snow',
+            modules: {
+                toolbar: [
+                    [{ 'header': [1, 2, 3, false] }],
+                    ['bold', 'italic', 'underline', 'strike'],
+                    ['blockquote', 'code-block'],
+                    [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                    [{ 'script': 'sub' }, { 'script': 'super' }],
+                    [{ 'color': [] }, { 'background': [] }],
+                    ['link', 'image', 'video'],
+                    ['clean']
+                ]
+            }
+        });
+
+        // Load existing content
+        const hiddenInput = document.getElementById('hiddenBodyHtml');
+        if (hiddenInput.value) {
+            quill.root.innerHTML = hiddenInput.value;
+        }
+
+        // Sync on submit
+        form.addEventListener('submit', function () {
+            hiddenInput.value = quill.root.innerHTML;
+        });
 
         function updateFields() {
             const val = typeSelect.value;

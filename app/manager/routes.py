@@ -316,12 +316,21 @@ def groups():
 def new_group():
     form = UserGroupForm()
     if form.validate_on_submit():
-        group = UserGroup(name=form.name.data, description=form.description.data, manager_id=current_user.id)
-        db.session.add(group)
-        db.session.commit()
-        current_app.logger.info(f'Group created: {group.name} by {current_user.email}')
-        flash('Group created.', 'success')
-        return redirect(url_for('manager.groups'))
+        if UserGroup.query.filter_by(name=form.name.data).first():
+            flash('Group with this name already exists.', 'danger')
+            return render_template('manager/group_form.html', title='New Group', form=form)
+
+        try:
+            group = UserGroup(name=form.name.data, description=form.description.data, manager_id=current_user.id)
+            db.session.add(group)
+            db.session.commit()
+            current_app.logger.info(f'Group created: {group.name} by {current_user.email}')
+            flash('Group created.', 'success')
+            return redirect(url_for('manager.groups'))
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error creating group: {e}")
+            flash('An error occurred while creating the group.', 'danger')
     return render_template('manager/group_form.html', title='New Group', form=form)
 
 @bp.route('/users/<int:id>/delete', methods=['POST'])
