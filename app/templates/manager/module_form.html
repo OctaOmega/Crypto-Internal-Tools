@@ -48,8 +48,8 @@
                                 <span class="text-muted ms-2">({{ (module.file.size / 1024 / 1024)|round(2) }}
                                     MB)</span>
                             </div>
-                            <button type="submit" class="btn btn-outline-danger"
-                                data-confirm-message="Delete this file?">
+                            <button type="button" class="btn btn-outline-danger"
+                                onclick="if(confirm('Delete this file?')) { document.getElementById('deleteFileForm').submit(); }">
                                 <i class="fas fa-trash"></i> Delete File
                             </button>
                         </div>
@@ -77,7 +77,7 @@
                     <div class="d-grid gap-2 d-md-flex justify-content-md-end">
                         <a href="{{ url_for('manager.course_modules', id=course.id) }}"
                             class="btn btn-outline-secondary me-md-2">Cancel</a>
-                        {{ form.submit(class="btn btn-primary") }}
+                        {{ form.submit(class="btn btn-primary", disabled=True if module and module.file else False) }}
                     </div>
                 </form>
             </div>
