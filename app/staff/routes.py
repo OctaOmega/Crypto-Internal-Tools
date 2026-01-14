@@ -19,6 +19,7 @@ from app.email_utils import send_email
 import jks
 import hashlib
 import os
+import binascii
 
 def parse_cert_source(file_data, filename, password=None):
     """

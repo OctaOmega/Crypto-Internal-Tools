@@ -375,6 +375,11 @@ def edit_group(id):
 @manager_required
 def delete_group(id):
     group = UserGroup.query.get_or_404(id)
+    
+    # Manager can only delete their own groups, Admin can delete all
+    if current_user.role != UserRole.ADMIN.value and group.manager_id != current_user.id:
+        abort(403)
+        
     # Optional: check if users are in group
     db.session.delete(group)
     db.session.commit()
@@ -496,6 +501,13 @@ def edit_module(id):
 @manager_required
 def delete_module_file(id):
     module = CourseModule.query.get_or_404(id)
+    
+    # Restrict: Managers can only modify if course is draft (similar to delete_course)
+    if current_user.role != UserRole.ADMIN.value:
+         if module.course.status != CourseStatus.DRAFT.value:
+             flash('Cannot delete files from published courses. Disable the course first.', 'warning')
+             return redirect(url_for('manager.edit_module', id=module.id))
+
     if module.file:
         # Optional: Delete actual file from disk
         # full_path = os.path.join(current_app.config['UPLOAD_FOLDER'], module.file.filename)
@@ -514,6 +526,13 @@ def delete_module_file(id):
 @manager_required
 def delete_module(id):
     module = CourseModule.query.get_or_404(id)
+    
+    # Restrict: Managers can only delete if course is draft
+    if current_user.role != UserRole.ADMIN.value:
+         if module.course.status != CourseStatus.DRAFT.value:
+             flash('Cannot delete modules from published courses. Disable the course first.', 'warning')
+             return redirect(url_for('manager.course_modules', id=module.course_id))
+
     course_id = module.course_id
     db.session.delete(module)
     db.session.commit()
@@ -677,6 +696,11 @@ def edit_news(id):
 @manager_required
 def delete_news(id):
     news = NewsItem.query.get_or_404(id)
+    
+    # Manager can only delete their own news, Admin can delete all
+    if current_user.role != UserRole.ADMIN.value and news.created_by_id != current_user.id:
+        abort(403)
+
     db.session.delete(news)
     db.session.commit()
     current_app.logger.info(f'News item deleted: {news.title} (ID: {id}) by {current_user.email}')
