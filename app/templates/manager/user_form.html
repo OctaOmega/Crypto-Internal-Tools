@@ -42,6 +42,11 @@
                             {{ form.status(class="form-select") }}
                         </div>
                     </div>
+                    <div class="mb-3">
+                        {{ form.groups.label(class="form-label") }}
+                        {{ form.groups(class="form-select", size=4) }}
+                        <small class="text-muted">Hold Ctrl/Cmd to select multiple.</small>
+                    </div>
 
                     <div class="d-grid gap-2 d-md-flex justify-content-md-end">
                         <a href="{{ url_for('manager.users') }}" class="btn btn-outline-secondary me-md-2">Cancel</a>
