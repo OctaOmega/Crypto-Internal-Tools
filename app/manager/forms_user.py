@@ -1,5 +1,5 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField, SelectField, SubmitField, PasswordField
+from wtforms import StringField, SelectField, SubmitField, PasswordField, SelectMultipleField
 from wtforms.validators import DataRequired, Email, Optional
 from app.models import UserRole
 from app.password_validation import validate_password_policy
@@ -13,6 +13,7 @@ class UserForm(FlaskForm):
         (UserRole.MANAGER.value, 'Manager')
     ])
     status = SelectField('Status', choices=[('active', 'Active'), ('inactive', 'Inactive')])
+    groups = SelectMultipleField('Groups', coerce=int)
     submit = SubmitField('Save User')
 
 class UserGroupForm(FlaskForm):

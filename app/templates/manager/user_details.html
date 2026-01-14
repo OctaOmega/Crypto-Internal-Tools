@@ -22,7 +22,15 @@
                     <strong>Email:</strong> {{ user.email }}<br>
                     <strong>Role:</strong> <span class="badge bg-secondary">{{ user.role }}</span><br>
                     <strong>Status:</strong> <span class="badge bg-success">{{ user.status }}</span><br>
-                    <strong>Joined:</strong> {{ user.created_at.strftime('%Y-%m-%d') }}
+                    <strong>Joined:</strong> {{ user.created_at.strftime('%Y-%m-%d') }}<br>
+                    <strong>Groups:</strong>
+                    {% if user.groups %}
+                    {% for group in user.groups %}
+                    <span class="badge bg-info text-dark">{{ group.name }}</span>
+                    {% endfor %}
+                    {% else %}
+                    <span class="text-muted">None</span>
+                    {% endif %}
                 </p>
             </div>
         </div>

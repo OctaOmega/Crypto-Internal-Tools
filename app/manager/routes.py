@@ -243,11 +243,20 @@ def edit_user(id):
              (UserRole.ADMIN.value, 'Admin')
          ]
          
+    # Populate Group Choices
+    all_groups = UserGroup.query.order_by(UserGroup.name).all()
+    form.groups.choices = [(g.id, g.name) for g in all_groups]
+
     if form.validate_on_submit():
         user.name = form.name.data
         user.email = form.email.data
         user.role = form.role.data
         user.status = form.status.data
+        
+        # Update Groups
+        selected_groups = UserGroup.query.filter(UserGroup.id.in_(form.groups.data)).all()
+        user.groups = selected_groups
+        
         db.session.commit()
         current_app.logger.info(f'User updated: {user.email} (ID: {id}) by {current_user.email}')
         flash('User updated successfully.', 'success')
@@ -257,6 +266,7 @@ def edit_user(id):
         form.email.data = user.email
         form.role.data = user.role
         form.status.data = user.status
+        form.groups.data = [g.id for g in user.groups]
         
     return render_template('manager/user_form.html', title='Edit User', form=form)
 
@@ -271,12 +281,14 @@ def new_user():
         form.role.choices = [(UserRole.STAFF.value, 'Staff')]
     elif current_user.role == UserRole.ADMIN.value:
          # Admin can create Managers and Staff, but not other Admins.
-         # "a manager user can create users for staff role but not a manager or admin role"
-         # "Only admin user has the option to create manager users"
          form.role.choices = [
              (UserRole.STAFF.value, 'Staff'),
              (UserRole.MANAGER.value, 'Manager')
          ]
+         
+    # Populate Group Choices
+    all_groups = UserGroup.query.order_by(UserGroup.name).all()
+    form.groups.choices = [(g.id, g.name) for g in all_groups]
          
     if form.validate_on_submit():
         if not form.password.data:
@@ -295,6 +307,11 @@ def new_user():
             status=form.status.data
         )
         user.set_password(form.password.data)
+        
+        # Set Groups
+        selected_groups = UserGroup.query.filter(UserGroup.id.in_(form.groups.data)).all()
+        user.groups = selected_groups
+        
         db.session.add(user)
         db.session.commit()
         current_app.logger.info(f'New user onboarded: {user.email} (ID: {user.id}) by {current_user.email}')
