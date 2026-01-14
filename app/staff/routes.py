@@ -145,7 +145,7 @@ def extract_cert_from_source(source_info, selection_alias=None, password=None):
     else:
         return source_info['cert']
 
-
+def format_hex(data):
     """Formats bytes into a colon-separated hex string."""
     return ":".join(f"{b:02x}" for b in data)
 
@@ -734,6 +734,7 @@ def tool_jks_base64():
                 flash(f"Error converting file: {str(e)}", "danger")
     
     return render_template('staff/tool_jks_base64.html', title='JKS to Base64', result=result)
+    
 @bp.route('/tools/compare-certs', methods=['GET', 'POST'])
 @login_required
 def tool_compare_certs():
