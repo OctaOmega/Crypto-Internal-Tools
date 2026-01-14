@@ -16,59 +16,63 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.serialization import pkcs12
 from flask import send_file
 from app.email_utils import send_email
-import subprocess
-import tempfile
+import jks
 import hashlib
 import os
 
 def parse_cert_source(file_data, filename, password=None):
     """
     Parses a certificate source (PEM, PFX, JKS) and returns a list of available certs.
-    Returns: {'type': 'single'|'multi', 'certs': [{'alias': '...', 'subject': '...'}], 'format': '...', 'temp_path': '...'}
+    Returns: {'type': 'single'|'multi', 'certs': [{'alias': '...', 'subject': '...'}], 'format': '...', 'data': ...}
     """
     filename_lower = filename.lower()
     
-    # Create temp file to handle JKS/PFX via file paths if needed
-    fd, temp_path = tempfile.mkstemp()
-    with os.fdopen(fd, 'wb') as tmp:
-        tmp.write(file_data)
-        
     try:
         if filename_lower.endswith('.jks') or filename_lower.endswith('.keystore'):
-            # Use keytool
-            cmd = ['keytool', '-list', '-v', '-keystore', temp_path]
-            if password:
-                cmd.extend(['-storepass', password])
-            else:
-                # Try empty password or promptless? Keytool usually requires pass for -list -v unless storepass is protected?
-                # Actually -list can work without password for some integrity checks but usually needs it for content.
-                # Assuming empty or user provided.
-                 cmd.extend(['-storepass', '']) # Try empty if none provided? Or maybe let it fail?
-            
-            # Keytool might fail if no password. We'll capture output.
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode != 0:
-                # Try without password if it failed (some JKS allow listing)
-                if not password:
-                     cmd = ['keytool', '-list', '-v', '-keystore', temp_path]
-                     result = subprocess.run(cmd, capture_output=True, text=True)
+            # Use python-jks
+            try:
+                # helper to try password
+                def load_store(pwd):
+                     return jks.KeyStore.loads(file_data, pwd)
                 
-                if result.returncode != 0:
-                     raise Exception(f"Keytool error: {result.stdout} {result.stderr}")
+                keystore = None
+                try:
+                    keystore = load_store(password if password else '')
+                except:
+                     # Try common defaults if empty or failed? 
+                     # python-jks usually needs correct password to decrypt proprietary format, 
+                     # OR if it's JKS, it might read public certs without it? 
+                     # Actually JKS integrity check needs password. Standard JKS is often 'changeit'.
+                     # But if user provided none, and it failed, maybe try 'changeit'? 
+                     # For now, just let it fail or rely on user input.
+                     # But wait, sometimes users upload JKS without password for truststores.
+                     # jks library raises error usually.
+                     if not password:
+                         # Try 'changeit' as fallback?
+                         try: keystore = load_store('changeit')
+                         except: pass
+                     
+                     if not keystore: raise
 
-            # Parse output for aliases
+            except Exception as e:
+                raise Exception(f"JKS Load Error: {str(e)}")
+
             aliases = []
-            current_alias = None
-            for line in result.stdout.splitlines():
-                line = line.strip()
-                if line.startswith('Alias name:'):
-                    current_alias = line.split(':', 1)[1].strip()
-                    aliases.append({'alias': current_alias, 'subject': 'Unknown (See details)'}) 
-                elif line.startswith('Owner:') and current_alias:
-                     # Update subject for last alias
-                     aliases[-1]['subject'] = line.split(':', 1)[1].strip()
+            
+            # Private Keys (usually have cert chains)
+            for alias, pk in keystore.private_keys.items():
+                # pk.cert_chain is a list of (type, data) tuples
+                if pk.cert_chain:
+                     # Parse first cert to get subject
+                     cert = x509.load_der_x509_certificate(pk.cert_chain[0][1], default_backend())
+                     aliases.append({'alias': alias, 'subject': cert.subject.rfc4514_string(), 'type': 'private_key'})
+            
+            # Trusted Certs
+            for alias, c in keystore.certs.items():
+                 cert = x509.load_der_x509_certificate(c.cert, default_backend())
+                 aliases.append({'alias': alias, 'subject': cert.subject.rfc4514_string(), 'type': 'trusted_cert'})
 
-            return {'type': 'multi', 'certs': aliases, 'format': 'jks', 'temp_path': temp_path}
+            return {'type': 'multi', 'certs': aliases, 'format': 'jks', 'data': file_data}
 
         elif filename_lower.endswith('.p12') or filename_lower.endswith('.pfx'):
             try:
@@ -84,7 +88,7 @@ def parse_cert_source(file_data, filename, password=None):
                     for i, cert in enumerate(p12[2]):
                         certs.append({'alias': f'Additional Cert {i+1}', 'subject': cert.subject.rfc4514_string(), 'obj': cert})
                 
-                return {'type': 'multi', 'certs': certs, 'format': 'pfx', 'data': file_data} # We can keep PFX in memory or temp
+                return {'type': 'multi', 'certs': certs, 'format': 'pfx', 'data': file_data}
             except Exception as e:
                 raise Exception(f"PFX Load Error: {str(e)}")
 
@@ -102,7 +106,6 @@ def parse_cert_source(file_data, filename, password=None):
                 except:
                      raise Exception("Could not parse as PEM or DER certificate")
     except Exception as e:
-        os.remove(temp_path)
         raise e
 
 def extract_cert_from_source(source_info, selection_alias=None, password=None):
@@ -110,18 +113,18 @@ def extract_cert_from_source(source_info, selection_alias=None, password=None):
     Extracts the specific x509 certificate based on selection.
     """
     if source_info['format'] == 'jks':
-        # Use keytool -exportcert -alias ... | openssl x509? 
-        # Or better, since we don't have python-jks, we rely on keytool -exportcert -rfc which prints PEM.
-        cmd = ['keytool', '-exportcert', '-rfc', '-alias', selection_alias, '-keystore', source_info['temp_path']]
-        if password:
-            cmd.extend(['-storepass', password])
+        keystore = jks.KeyStore.loads(source_info['data'], password if password else '')
+        # Try finding in private keys
+        if selection_alias in keystore.private_keys:
+             pk = keystore.private_keys[selection_alias]
+             if pk.cert_chain:
+                 return x509.load_der_x509_certificate(pk.cert_chain[0][1], default_backend())
+        # Try finding in certs
+        if selection_alias in keystore.certs:
+             c = keystore.certs[selection_alias]
+             return x509.load_der_x509_certificate(c.cert, default_backend())
         
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-             raise Exception(f"Keytool export error: {result.stderr}")
-        
-        cert_pem = result.stdout.encode()
-        return x509.load_pem_x509_certificate(cert_pem, default_backend())
+        raise Exception(f"Alias {selection_alias} not found in JKS")
 
     elif source_info['format'] == 'pfx':
         # We re-parse or use cached objs. 
@@ -141,6 +144,7 @@ def extract_cert_from_source(source_info, selection_alias=None, password=None):
 
     else:
         return source_info['cert']
+
 
     """Formats bytes into a colon-separated hex string."""
     return ":".join(f"{b:02x}" for b in data)
@@ -807,8 +811,8 @@ def tool_compare_certs():
             cert_b_obj = extract_cert_from_source(source_b, alias_b, pass_b)
             
             # Clean up temps
-            if 'temp_path' in source_a: os.remove(source_a['temp_path'])
-            if 'temp_path' in source_b: os.remove(source_b['temp_path'])
+            # if 'temp_path' in source_a: os.remove(source_a['temp_path'])
+            # if 'temp_path' in source_b: os.remove(source_b['temp_path'])
 
             # Compare
             # File Hashes
@@ -862,9 +866,9 @@ def tool_compare_certs():
             # traceback.print_exc()
             error = f"Error processing certificates: {str(e)}"
             # Cleanup attempts
-            try:
-                if 'source_a' in locals() and 'temp_path' in source_a: os.remove(source_a['temp_path'])
-                if 'source_b' in locals() and 'temp_path' in source_b: os.remove(source_b['temp_path'])
-            except: pass
+            # try:
+            #     if 'source_a' in locals() and 'temp_path' in source_a: os.remove(source_a['temp_path'])
+            #     if 'source_b' in locals() and 'temp_path' in source_b: os.remove(source_b['temp_path'])
+            # except: pass
 
     return render_template('staff/tool_compare_certs.html', title='Compare Certificates', result=result, error=error)
