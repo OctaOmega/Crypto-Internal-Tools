@@ -43,24 +43,54 @@
             <div class="card-body">
                 <table class="table table-borderless">
                     <tbody>
+                    <tbody>
                         <tr>
-                            <th class="w-25 text-muted">Subject</th>
-                            <td class="text-break font-monospace">{{ result.subject }}</td>
+                            <th class="w-25 text-muted">Version</th>
+                            <td class="font-monospace">{{ result.version }}</td>
                         </tr>
                         <tr>
-                            <th class="text-muted">Key Type</th>
-                            <td>{{ result.public_key_type }}</td>
+                            <th class="text-muted">Algorithm ID</th>
+                            <td class="font-monospace">{{ result.signature_algorithm }}</td>
                         </tr>
                         <tr>
-                            <th class="text-muted">Algorithm</th>
-                            <td>{{ result.signature_algorithm }}</td>
+                            <th class="text-muted">Subject</th>
+                            <td>
+                                <ul class="list-unstyled mb-0 font-monospace">
+                                    {% for attr in result.subject %}
+                                    <li><strong>{{ attr.label }}</strong> = {{ attr.value }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">Public Key</th>
+                            <td>
+                                <div class="font-monospace">
+                                    <div><strong>Algorithm:</strong> {{ result.public_key.algorithm }}</div>
+                                    <div><strong>Length:</strong> {{ result.public_key.length }} bits</div>
+                                    {% if result.public_key.modulus %}
+                                    <div class="mt-1"><strong>Modulus:</strong></div>
+                                    <div class="text-muted ps-3" style="font-size: 0.85em;">
+                                        {% for line in result.public_key.modulus %}
+                                        {{ line }}<br>
+                                        {% endfor %}
+                                    </div>
+                                    <div class="mt-1"><strong>Exponent:</strong> {{ result.public_key.exponent }}</div>
+                                    {% endif %}
+                                </div>
+                            </td>
                         </tr>
                         <tr>
                             <th class="text-muted">Extensions</th>
                             <td>
-                                <ul class="list-unstyled mb-0">
+                                <ul class="list-unstyled mb-0 font-monospace" style="font-size: 0.9em;">
                                     {% for ext in result.extensions %}
-                                    <li class="badge bg-secondary mb-1">{{ ext }}</li>
+                                    <li class="mb-2">
+                                        <strong>{{ ext.name }}</strong>
+                                        {% if ext.critical %}<span class="badge bg-danger">CRITICAL</span>{% endif %}
+                                        <br>
+                                        <span class="text-muted ps-3 d-block text-break">{{ ext.value }}</span>
+                                    </li>
                                     {% endfor %}
                                 </ul>
                             </td>

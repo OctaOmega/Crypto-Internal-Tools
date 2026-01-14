@@ -16,6 +16,89 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.serialization import pkcs12
 from flask import send_file
 from app.email_utils import send_email
+import binascii
+
+def format_hex(data):
+    """Formats bytes into a colon-separated hex string."""
+    return ":".join(f"{b:02x}" for b in data)
+
+def format_modulus(n):
+    """Formats RSA modulus with newlines and colon separation."""
+    hex_str = f"{n:x}"
+    if len(hex_str) % 2 != 0:
+        hex_str = '0' + hex_str
+    
+    # Split into pairs
+    pairs = [hex_str[i:i+2] for i in range(0, len(hex_str), 2)]
+    
+    # Group into lines of 16 pairs (like OpenSSL)
+    lines = []
+    for i in range(0, len(pairs), 16):
+        lines.append(":".join(pairs[i:i+16]))
+    
+    return lines
+
+def get_name_attributes(name):
+    """Extracts and formats Name attributes (C, ST, L, O, OU, CN)."""
+    attrs = []
+    oid_map = {
+        x509.NameOID.COUNTRY_NAME: 'C',
+        x509.NameOID.STATE_OR_PROVINCE_NAME: 'ST',
+        x509.NameOID.LOCALITY_NAME: 'L',
+        x509.NameOID.ORGANIZATION_NAME: 'O',
+        x509.NameOID.ORGANIZATIONAL_UNIT_NAME: 'OU',
+        x509.NameOID.COMMON_NAME: 'CN',
+        x509.NameOID.EMAIL_ADDRESS: 'Email'
+    }
+    
+    for attr in name:
+        label = oid_map.get(attr.oid, attr.oid._name)
+        attrs.append({'label': label, 'value': attr.value})
+    return attrs
+
+def get_extensions(exts):
+    """Extracts extension details."""
+    details = []
+    for ext in exts:
+        ext_data = {
+            'oid': ext.oid.dotted_string,
+            'name': ext.oid._name,
+            'critical': ext.critical,
+            'value': str(ext.value) # Fallback
+        }
+        
+        # Custom formatting for common extensions
+        try:
+            val = ext.value
+            if isinstance(val, x509.SubjectAlternativeName):
+                ext_data['value'] = ", ".join(d.value for d in val)
+                ext_data['type'] = 'SAN'
+            elif isinstance(val, x509.KeyUsage):
+                usages = []
+                if val.digital_signature: usages.append("Digital Signature")
+                if val.content_commitment: usages.append("Content Commitment")
+                if val.key_encipherment: usages.append("Key Encipherment")
+                if val.data_encipherment: usages.append("Data Encipherment")
+                if val.key_agreement: usages.append("Key Agreement")
+                if val.key_cert_sign: usages.append("Certificate Sign")
+                if val.crl_sign: usages.append("CRL Sign")
+                if val.encipher_only: usages.append("Encipher Only")
+                if val.decipher_only: usages.append("Decipher Only")
+                ext_data['value'] = ", ".join(usages)
+            elif isinstance(val, x509.BasicConstraints):
+                ext_data['value'] = f"CA:{val.ca}, Path Length:{val.path_length}"
+            elif isinstance(val, x509.ExtendedKeyUsage):
+                 ext_data['value'] = ", ".join(u._name for u in val)
+            elif isinstance(val, x509.AuthorityKeyIdentifier):
+                 kid = format_hex(val.key_identifier) if val.key_identifier else "None"
+                 ext_data['value'] = f"KeyID: {kid}"
+            elif isinstance(val, x509.SubjectKeyIdentifier):
+                 ext_data['value'] = format_hex(val.digest)
+        except:
+             pass 
+             
+        details.append(ext_data)
+    return details
 
 @bp.route('/change-password', methods=['GET', 'POST'])
 @login_required
@@ -279,11 +362,22 @@ def tool_csr():
         if csr_data:
             try:
                 csr = x509.load_pem_x509_csr(csr_data.encode(), default_backend())
+                
+                # Public Key
+                pub_key = csr.public_key()
+                pub_numbers = pub_key.public_numbers()
+                
                 result = {
-                    'subject': csr.subject.rfc4514_string(),
-                    'public_key_type': csr.public_key().__class__.__name__,
+                    'subject': get_name_attributes(csr.subject),
+                    'version': csr.version.name,
                     'signature_algorithm': csr.signature_algorithm_oid._name,
-                    'extensions': [ext.oid._name for ext in csr.extensions]
+                    'public_key': {
+                        'algorithm': 'RSA' if isinstance(pub_key, rsa.RSAPublicKey) else pub_key.__class__.__name__,
+                        'length': pub_key.key_size,
+                        'modulus': format_modulus(pub_numbers.n) if hasattr(pub_numbers, 'n') else None,
+                        'exponent': pub_numbers.e if hasattr(pub_numbers, 'e') else None
+                    },
+                    'extensions': get_extensions(csr.extensions)
                 }
             except Exception as e:
                 error = f"Invalid CSR Data: {str(e)}"
@@ -300,17 +394,42 @@ def tool_x509():
         if cert_data:
             try:
                 cert = x509.load_pem_x509_certificate(cert_data.encode(), default_backend())
+                
+                # Public Key
+                pub_key = cert.public_key()
+                pub_numbers = pub_key.public_numbers()
+                
+                # Fingerprints
+                clean_bytes = cert.public_bytes(serialization.Encoding.DER) # For consistent hashing? Or hash the whole cert? 
+                # Standard is hash the DER of the cert
+                fingerprints = {
+                    'md5': format_hex(cert.fingerprint(hashes.MD5())),
+                    'sha1': format_hex(cert.fingerprint(hashes.SHA1())),
+                    'sha256': format_hex(cert.fingerprint(hashes.SHA256()))
+                }
+
                 result = {
-                    'subject': cert.subject.rfc4514_string(),
-                    'issuer': cert.issuer.rfc4514_string(),
-                    'serial_number': cert.serial_number,
+                    'version': f"{cert.version.value} ({hex(cert.version.value)})" if hasattr(cert.version, 'value') else str(cert.version.name),
+                    'serial_number': f"{cert.serial_number} ({hex(cert.serial_number)})",
+                    'signature_algorithm': cert.signature_algorithm_oid._name,
                     'not_valid_before': cert.not_valid_before,
                     'not_valid_after': cert.not_valid_after,
-                    'version': cert.version.name,
-                    'signature_algorithm': cert.signature_algorithm_oid._name
+                    'issuer': get_name_attributes(cert.issuer),
+                    'subject': get_name_attributes(cert.subject),
+                    'fingerprints': fingerprints,
+                    'public_key': {
+                        'algorithm': 'RSA' if isinstance(pub_key, rsa.RSAPublicKey) else pub_key.__class__.__name__,
+                        'length': pub_key.key_size,
+                        'modulus': format_modulus(pub_numbers.n) if hasattr(pub_numbers, 'n') else None,
+                        'exponent': f"{pub_numbers.e} ({hex(pub_numbers.e)})" if hasattr(pub_numbers, 'e') else None
+                    },
+                    'signature': format_modulus(int.from_bytes(cert.signature, 'big')),
+                    'extensions': get_extensions(cert.extensions)
                 }
             except Exception as e:
-                error = f"Invalid Certificate Data: {str(e)}"
+                 import traceback
+                 traceback.print_exc()
+                 error = f"Invalid Certificate Data: {str(e)}"
     
     return render_template('staff/tool_x509.html', title='Certificate Decoder', result=result, error=error)
 

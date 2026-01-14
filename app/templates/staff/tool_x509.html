@@ -43,29 +43,101 @@
             <div class="card-body">
                 <table class="table table-borderless">
                     <tbody>
+                    <tbody>
                         <tr>
-                            <th class="w-25 text-muted">Subject</th>
-                            <td class="text-break font-monospace">{{ result.subject }}</td>
-                        </tr>
-                        <tr>
-                            <th class="text-muted">Issuer</th>
-                            <td class="text-break font-monospace">{{ result.issuer }}</td>
+                            <th class="w-25 text-muted">Version</th>
+                            <td class="font-monospace">{{ result.version }}</td>
                         </tr>
                         <tr>
                             <th class="text-muted">Serial Number</th>
-                            <td class="font-monospace">{{ result.serial_number }}</td>
+                            <td class="font-monospace text-break">{{ result.serial_number }}</td>
                         </tr>
                         <tr>
-                            <th class="text-muted">Valid From</th>
-                            <td class="text-success">{{ result.not_valid_before }}</td>
+                            <th class="text-muted">Algorithm ID</th>
+                            <td class="font-monospace">{{ result.signature_algorithm }}</td>
                         </tr>
                         <tr>
-                            <th class="text-muted">Valid Until</th>
-                            <td class="text-danger">{{ result.not_valid_after }}</td>
+                            <th class="text-muted">Validity</th>
+                            <td>
+                                <ul class="list-unstyled mb-0 font-monospace">
+                                    <li><strong>Not Before:</strong> {{ result.not_valid_before }}</li>
+                                    <li><strong>Not After:</strong> {{ result.not_valid_after }}</li>
+                                </ul>
+                            </td>
                         </tr>
                         <tr>
-                            <th class="text-muted">Algorithm</th>
-                            <td>{{ result.signature_algorithm }}</td>
+                            <th class="text-muted">Issuer</th>
+                            <td>
+                                <ul class="list-unstyled mb-0 font-monospace">
+                                    {% for attr in result.issuer %}
+                                    <li><strong>{{ attr.label }}</strong> = {{ attr.value }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">Subject</th>
+                            <td>
+                                <ul class="list-unstyled mb-0 font-monospace">
+                                    {% for attr in result.subject %}
+                                    <li><strong>{{ attr.label }}</strong> = {{ attr.value }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">Fingerprints</th>
+                            <td>
+                                <ul class="list-unstyled mb-0 font-monospace" style="font-size: 0.9em;">
+                                    <li><strong>MD5:</strong> {{ result.fingerprints.md5 }}</li>
+                                    <li><strong>SHA1:</strong> {{ result.fingerprints.sha1 }}</li>
+                                    <li><strong>SHA256:</strong> <span class="text-break">{{ result.fingerprints.sha256
+                                            }}</span></li>
+                                </ul>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">Public Key</th>
+                            <td>
+                                <div class="font-monospace">
+                                    <div><strong>Algorithm:</strong> {{ result.public_key.algorithm }}</div>
+                                    <div><strong>Length:</strong> {{ result.public_key.length }} bits</div>
+                                    {% if result.public_key.modulus %}
+                                    <div class="mt-1"><strong>Modulus:</strong></div>
+                                    <div class="text-muted ps-3" style="font-size: 0.85em;">
+                                        {% for line in result.public_key.modulus %}
+                                        {{ line }}<br>
+                                        {% endfor %}
+                                    </div>
+                                    <div class="mt-1"><strong>Exponent:</strong> {{ result.public_key.exponent }}</div>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">Extensions</th>
+                            <td>
+                                <ul class="list-unstyled mb-0 font-monospace" style="font-size: 0.9em;">
+                                    {% for ext in result.extensions %}
+                                    <li class="mb-2">
+                                        <strong>{{ ext.name }}</strong>
+                                        {% if ext.critical %}<span class="badge bg-danger">CRITICAL</span>{% endif %}
+                                        <br>
+                                        <span class="text-muted ps-3 d-block text-break">{{ ext.value }}</span>
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th class="text-muted">Signature</th>
+                            <td>
+                                <div class="text-muted ps-3 font-monospace" style="font-size: 0.85em;">
+                                    {% for line in result.signature %}
+                                    {{ line }}<br>
+                                    {% endfor %}
+                                </div>
+                            </td>
                         </tr>
                     </tbody>
                 </table>

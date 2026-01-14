@@ -1,6 +1,6 @@
-{% extends "staff/layout.html" %}
+{% extends "base.html" %}
 
-{% block staff_content %}
+{% block content %}
 <div class="row h-100">
     <!-- Sidebar -->
     <div class="col-md-3 border-end bg-white" style="min-height: 80vh;">
@@ -107,7 +107,7 @@
 {% endblock %}
 
 {% block scripts %}
-{{ super() }}
+
 <script>
     const enrollmentId = {{ current_progress.enrollment_id }};
     const moduleId = {{ module.id }};
