@@ -9,6 +9,7 @@ import pandas as pd
 from datetime import datetime
 from sqlalchemy import func, desc
 from app.models import ModuleProgress
+import base64
 
 
 @bp.route('/dashboard')
@@ -397,21 +398,25 @@ def handle_file_upload(file_storage):
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
     filename = f"{base}_{timestamp}{ext}"
     
-    upload_folder = current_app.config['UPLOAD_FOLDER']
-    if not os.path.exists(upload_folder):
-        os.makedirs(upload_folder)
-        
-    path = os.path.join(upload_folder, filename)
-    file_storage.save(path)
+    # Read and encode file content
+    file_content = file_storage.read()
+    b64_content = base64.b64encode(file_content).decode('utf-8')
+
+    # Security: In this mode, we do NOT save to disk if we are using DB storage.
+    # However, to maintain compatibility or if we want backup, we could.
+    # User asked to "not keep it on app root statics", so we SKIP disk save.
     
-    # Store relative path for URL generation
-    relative_path = f"uploads/{filename}"
+    # We still need a valid storage_path for the DB constraint if any? No, it's just a string.
+    # We can perform a fake path or just empty. But some logic might rely on it.
+    # Let's keep the filename as path or a placeholder.
+    relative_path = f"db_stored/{filename}"
     
     asset = FileAsset(
         filename=filename,
-        storage_path=relative_path,
+        storage_path=relative_path, # Legacy field
         mime_type=file_storage.content_type,
-        size=os.path.getsize(path),
+        size=len(file_content),
+        content_blob=b64_content,
         uploaded_by=current_user.id
     )
     db.session.add(asset)

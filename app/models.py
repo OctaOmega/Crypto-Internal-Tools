@@ -145,6 +145,7 @@ class FileAsset(db.Model):
     storage_path = db.Column(db.String(512))
     mime_type = db.Column(db.String(64))
     size = db.Column(db.Integer)
+    content_blob = db.Column(db.Text) # Base64 encoded content
     uploaded_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
