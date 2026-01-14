@@ -48,8 +48,7 @@
                                 <span class="text-muted ms-2">({{ (module.file.size / 1024 / 1024)|round(2) }}
                                     MB)</span>
                             </div>
-                            <button type="button" class="btn btn-outline-danger"
-                                onclick="if(confirm('Delete this file?')) { document.getElementById('deleteFileForm').submit(); }">
+                            <button type="submit" form="deleteFileForm" class="btn btn-outline-danger">
                                 <i class="fas fa-trash"></i> Delete File
                             </button>
                         </div>
@@ -87,7 +86,7 @@
 
 {% if module and module.id %}
 <form id="deleteFileForm" action="{{ url_for('manager.delete_module_file', id=module.id) }}" method="POST"
-    style="display: none;"></form>
+    style="display: none;" data-confirm-message="Are you sure you want to delete this file?"></form>
 {% endif %}
 {% endblock %}
 
