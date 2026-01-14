@@ -14,3 +14,5 @@
 2026-01-14 11:47:13,019 INFO: Successful login for user: admin@example.com (Role: admin) [in E:\APPSEC-TOOLS-TD\Crypto\Crypto Internal Tools\app\auth\routes.py:49]
 2026-01-14 11:48:12,543 INFO: Module created: x509 (ID: 5) for Course 3 by admin@example.com [in E:\APPSEC-TOOLS-TD\Crypto\Crypto Internal Tools\app\manager\routes.py:454]
 2026-01-14 11:48:42,787 INFO: Successful login for user: staff1@example.com (Role: staff) [in E:\APPSEC-TOOLS-TD\Crypto\Crypto Internal Tools\app\auth\routes.py:49]
+2026-01-14 12:49:33,372 INFO: Crypto Internal Tools startup [in E:\APPSEC-TOOLS-TD\Crypto\Crypto Internal Tools\app\__init__.py:123]
+2026-01-14 13:22:35,999 INFO: Module updated: Summary PDF (ID: 3) by admin@example.com [in E:\APPSEC-TOOLS-TD\Crypto\Crypto Internal Tools\app\manager\routes.py:481]

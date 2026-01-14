@@ -369,8 +369,8 @@ def tool_csr():
                 
                 result = {
                     'subject': get_name_attributes(csr.subject),
-                    'version': csr.version.name,
-                    'signature_algorithm': csr.signature_algorithm_oid._name,
+                    'version': csr.version.name if hasattr(csr, 'version') else 'v1',
+                    'signature_algorithm': csr.signature_algorithm_oid._name if hasattr(csr.signature_algorithm_oid, '_name') else str(csr.signature_algorithm_oid),
                     'public_key': {
                         'algorithm': 'RSA' if isinstance(pub_key, rsa.RSAPublicKey) else pub_key.__class__.__name__,
                         'length': pub_key.key_size,
