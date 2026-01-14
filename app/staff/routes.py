@@ -722,6 +722,7 @@ def tool_pfx_split():
 @login_required
 def tool_jks_base64():
     result = None
+    filename = None
     if request.method == 'POST':
         jks_file = request.files.get('jks_file')
         if jks_file:
@@ -730,10 +731,11 @@ def tool_jks_base64():
                 # mimic "cat JKS | base64 | tr -d '\n'"
                 b64_data = base64.b64encode(file_data).decode('utf-8')
                 result = b64_data
+                filename = jks_file.filename
             except Exception as e:
                 flash(f"Error converting file: {str(e)}", "danger")
     
-    return render_template('staff/tool_jks_base64.html', title='JKS to Base64', result=result)
+    return render_template('staff/tool_jks_base64.html', title='JKS to Base64', result=result, filename=filename)
     
 @bp.route('/tools/compare-certs', methods=['GET', 'POST'])
 @login_required
