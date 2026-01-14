@@ -1,0 +1,217 @@
+{% extends "staff/layout.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Compare Certificates</h1>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+{% for category, message in messages %}
+<div class="alert alert-{{ category }}">{{ message }}</div>
+{% endfor %}
+{% endif %}
+{% endwith %}
+
+{% if error %}
+<div class="alert alert-danger">{{ error }}</div>
+{% endif %}
+
+{% if not selection_stage and not result %}
+<!-- Initial Upload Form -->
+<form method="POST" enctype="multipart/form-data" action="{{ url_for('staff.tool_compare_certs') }}">
+    <input type="hidden" name="action" value="analyze">
+    <div class="row">
+        <!-- File A -->
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Certificate A (Source)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="file_a" class="form-label">Upload Certificate File</label>
+                        <input class="form-control" type="file" id="file_a" name="file_a" required>
+                        <div class="form-text">Supports PEM, DER, PFX, P12, JKS</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password_a" class="form-label">Password (if encrypted)</label>
+                        <input type="password" class="form-control" id="password_a" name="password_a">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- File B -->
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">Certificate B (Target)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="file_b" class="form-label">Upload Certificate File</label>
+                        <input class="form-control" type="file" id="file_b" name="file_b" required>
+                        <div class="form-text">Supports PEM, DER, PFX, P12, JKS</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password_b" class="form-label">Password (if encrypted)</label>
+                        <input type="password" class="form-control" id="password_b" name="password_b">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="d-grid gap-2">
+        <button type="submit" class="btn btn-primary btn-lg">Compare Certificates</button>
+    </div>
+</form>
+
+{% elif selection_stage %}
+<!-- Selection Stage -->
+<div class="alert alert-info">
+    <i class="fas fa-info-circle"></i> One or more files contain multiple certificates. Please select which certificate
+    to compare.
+</div>
+
+<form method="POST" action="{{ url_for('staff.tool_compare_certs') }}">
+    <input type="hidden" name="action" value="compare">
+    <!-- Pass content through -->
+    <input type="hidden" name="content_a_b64" value="{{ content_a_b64 }}">
+    <input type="hidden" name="content_b_b64" value="{{ content_b_b64 }}">
+    <input type="hidden" name="name_a" value="{{ name_a }}">
+    <input type="hidden" name="name_b" value="{{ name_b }}">
+    <input type="hidden" name="password_a" value="{{ pass_a }}">
+    <input type="hidden" name="password_b" value="{{ pass_b }}">
+
+    <div class="row">
+        <!-- File A Selection -->
+        <div class="col-md-6">
+            <div class="card mb-3">
+                <div class="card-header">Select from {{ name_a }}</div>
+                <div class="card-body">
+                    {% if source_a.type == 'multi' %}
+                    <div class="list-group">
+                        {% for item in source_a.certs %}
+                        <label class="list-group-item">
+                            <input class="form-check-input me-1" type="radio" name="alias_a" value="{{ item.alias }}" {%
+                                if loop.first %}checked{% endif %}>
+                            <strong>{{ item.alias }}</strong><br>
+                            <small class="text-muted">{{ item.subject }}</small>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-success"><i class="fas fa-check"></i> Single Certificate Found</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- File B Selection -->
+        <div class="col-md-6">
+            <div class="card mb-3">
+                <div class="card-header">Select from {{ name_b }}</div>
+                <div class="card-body">
+                    {% if source_b.type == 'multi' %}
+                    <div class="list-group">
+                        {% for item in source_b.certs %}
+                        <label class="list-group-item">
+                            <input class="form-check-input me-1" type="radio" name="alias_b" value="{{ item.alias }}" {%
+                                if loop.first %}checked{% endif %}>
+                            <strong>{{ item.alias }}</strong><br>
+                            <small class="text-muted">{{ item.subject }}</small>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-success"><i class="fas fa-check"></i> Single Certificate Found</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="d-grid gap-2">
+        <button type="submit" class="btn btn-primary">Proceed to Comparison</button>
+    </div>
+</form>
+
+{% elif result %}
+<!-- Results View -->
+<div class="mb-3">
+    <a href="{{ url_for('staff.tool_compare_certs') }}" class="btn btn-outline-secondary">&larr; New Comparison</a>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">Comparison Result</div>
+    <div class="card-body">
+        <div class="row text-center mb-4">
+            <div class="col-md-4">
+                <h6>File Check</h6>
+                {% if result.match_file_hash %}
+                <span class="badge bg-success p-2">Files are Identical (Binary)</span>
+                {% else %}
+                <span class="badge bg-warning text-dark p-2">Files are Different</span>
+                {% endif %}
+            </div>
+            <div class="col-md-4">
+                <small class="d-block text-muted">File A: {{ result.name_a }}</small>
+                <code style="font-size: 0.8em;">{{ result.hash_a[:16] }}...</code>
+            </div>
+            <div class="col-md-4">
+                <small class="d-block text-muted">File B: {{ result.name_b }}</small>
+                <code style="font-size: 0.8em;">{{ result.hash_b[:16] }}...</code>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 20%;">Attribute</th>
+                        <th style="width: 35%;">{{ result.name_a }}</th>
+                        <th style="width: 35%;">{{ result.name_b }}</th>
+                        <th style="width: 10%;">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in result.comparison %}
+                    <tr class="{{ 'table-success' if row.match else 'table-danger' }}">
+                        <td><strong>{{ row.key|replace('_', ' ')|title }}</strong></td>
+                        <td>
+                            {% if row.key == 'san' %}
+                            {% for san in row.val_a %}
+                            <div class="text-truncate" style="max-width: 250px;" title="{{ san.value }}">{{ san.value }}
+                            </div>
+                            {% endfor %}
+                            {% else %}
+                            <div class="text-break">{{ row.val_a }}</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if row.key == 'san' %}
+                            {% for san in row.val_b %}
+                            <div class="text-truncate" style="max-width: 250px;" title="{{ san.value }}">{{ san.value }}
+                            </div>
+                            {% endfor %}
+                            {% else %}
+                            <div class="text-break">{{ row.val_b }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if row.match %}
+                            <i class="fas fa-check-circle text-success"></i>
+                            {% else %}
+                            <i class="fas fa-times-circle text-danger"></i>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% endif %}
+{% endblock %}

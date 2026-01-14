@@ -16,9 +16,132 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.serialization import pkcs12
 from flask import send_file
 from app.email_utils import send_email
-import binascii
+import subprocess
+import tempfile
+import hashlib
+import os
 
-def format_hex(data):
+def parse_cert_source(file_data, filename, password=None):
+    """
+    Parses a certificate source (PEM, PFX, JKS) and returns a list of available certs.
+    Returns: {'type': 'single'|'multi', 'certs': [{'alias': '...', 'subject': '...'}], 'format': '...', 'temp_path': '...'}
+    """
+    filename_lower = filename.lower()
+    
+    # Create temp file to handle JKS/PFX via file paths if needed
+    fd, temp_path = tempfile.mkstemp()
+    with os.fdopen(fd, 'wb') as tmp:
+        tmp.write(file_data)
+        
+    try:
+        if filename_lower.endswith('.jks') or filename_lower.endswith('.keystore'):
+            # Use keytool
+            cmd = ['keytool', '-list', '-v', '-keystore', temp_path]
+            if password:
+                cmd.extend(['-storepass', password])
+            else:
+                # Try empty password or promptless? Keytool usually requires pass for -list -v unless storepass is protected?
+                # Actually -list can work without password for some integrity checks but usually needs it for content.
+                # Assuming empty or user provided.
+                 cmd.extend(['-storepass', '']) # Try empty if none provided? Or maybe let it fail?
+            
+            # Keytool might fail if no password. We'll capture output.
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                # Try without password if it failed (some JKS allow listing)
+                if not password:
+                     cmd = ['keytool', '-list', '-v', '-keystore', temp_path]
+                     result = subprocess.run(cmd, capture_output=True, text=True)
+                
+                if result.returncode != 0:
+                     raise Exception(f"Keytool error: {result.stdout} {result.stderr}")
+
+            # Parse output for aliases
+            aliases = []
+            current_alias = None
+            for line in result.stdout.splitlines():
+                line = line.strip()
+                if line.startswith('Alias name:'):
+                    current_alias = line.split(':', 1)[1].strip()
+                    aliases.append({'alias': current_alias, 'subject': 'Unknown (See details)'}) 
+                elif line.startswith('Owner:') and current_alias:
+                     # Update subject for last alias
+                     aliases[-1]['subject'] = line.split(':', 1)[1].strip()
+
+            return {'type': 'multi', 'certs': aliases, 'format': 'jks', 'temp_path': temp_path}
+
+        elif filename_lower.endswith('.p12') or filename_lower.endswith('.pfx'):
+            try:
+                p12 = pkcs12.load_key_and_certificates(
+                    file_data,
+                    password.encode() if password else None,
+                    backend=default_backend()
+                )
+                certs = []
+                if p12[1]: # Main cert
+                    certs.append({'alias': 'Main Certificate', 'subject': p12[1].subject.rfc4514_string(), 'obj': p12[1]})
+                if p12[2]: # Additional
+                    for i, cert in enumerate(p12[2]):
+                        certs.append({'alias': f'Additional Cert {i+1}', 'subject': cert.subject.rfc4514_string(), 'obj': cert})
+                
+                return {'type': 'multi', 'certs': certs, 'format': 'pfx', 'data': file_data} # We can keep PFX in memory or temp
+            except Exception as e:
+                raise Exception(f"PFX Load Error: {str(e)}")
+
+        else:
+            # Assume PEM/DER
+            try:
+                # Try PEM
+                cert = x509.load_pem_x509_certificate(file_data, default_backend())
+                return {'type': 'single', 'cert': cert, 'format': 'pem'}
+            except:
+                # Try DER
+                try:
+                    cert = x509.load_der_x509_certificate(file_data, default_backend())
+                    return {'type': 'single', 'cert': cert, 'format': 'der'}
+                except:
+                     raise Exception("Could not parse as PEM or DER certificate")
+    except Exception as e:
+        os.remove(temp_path)
+        raise e
+
+def extract_cert_from_source(source_info, selection_alias=None, password=None):
+    """
+    Extracts the specific x509 certificate based on selection.
+    """
+    if source_info['format'] == 'jks':
+        # Use keytool -exportcert -alias ... | openssl x509? 
+        # Or better, since we don't have python-jks, we rely on keytool -exportcert -rfc which prints PEM.
+        cmd = ['keytool', '-exportcert', '-rfc', '-alias', selection_alias, '-keystore', source_info['temp_path']]
+        if password:
+            cmd.extend(['-storepass', password])
+        
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+             raise Exception(f"Keytool export error: {result.stderr}")
+        
+        cert_pem = result.stdout.encode()
+        return x509.load_pem_x509_certificate(cert_pem, default_backend())
+
+    elif source_info['format'] == 'pfx':
+        # We re-parse or use cached objs. 
+        # Since we can't easily pickle x509 objs across requests if we use stateless web, 
+        # we might need to re-parse. For now assuming we re-parse.
+        p12 = pkcs12.load_key_and_certificates(
+            source_info['data'],
+            password.encode() if password else None,
+            default_backend()
+        )
+        if selection_alias == 'Main Certificate':
+            return p12[1]
+        elif selection_alias.startswith('Additional Cert '):
+            idx = int(selection_alias.replace('Additional Cert ', '')) - 1
+            return p12[2][idx]
+        return None
+
+    else:
+        return source_info['cert']
+
     """Formats bytes into a colon-separated hex string."""
     return ":".join(f"{b:02x}" for b in data)
 
@@ -607,3 +730,141 @@ def tool_jks_base64():
                 flash(f"Error converting file: {str(e)}", "danger")
     
     return render_template('staff/tool_jks_base64.html', title='JKS to Base64', result=result)
+@bp.route('/tools/compare-certs', methods=['GET', 'POST'])
+@login_required
+def tool_compare_certs():
+    result = None
+    error = None
+    selection_stage = False
+    
+    # We might need to store uploaded files temporarily if we are in "selection" stage
+    # But files are lost after request. 
+    # Solution: If Method is POST and 'action' is 'compare', we expect files selected.
+    # If Method is POST and 'action' is 'analyze', we parse and if multi, show selection.
+    
+    if request.method == 'POST':
+        action = request.form.get('action')
+        
+        try:
+            # File data might be in request.files OR we might have to cache it?
+            # Standard pattern: User uploads, if disambiguation needed, we render page with hidden fields containing contents? 
+            # Base64 encoding the file content into hidden fields is easiest for statelessness if files aren't huge.
+            
+            file_a_storage = request.files.get('file_a')
+            file_b_storage = request.files.get('file_b')
+            pass_a = request.form.get('password_a')
+            pass_b = request.form.get('password_b')
+            
+            # Check if we are coming from selection stage (hidden content)
+            content_a_b64 = request.form.get('content_a_b64')
+            content_b_b64 = request.form.get('content_b_b64')
+            
+            data_a = None
+            data_b = None
+            name_a = request.form.get('name_a', 'File A')
+            name_b = request.form.get('name_b', 'File B')
+
+            if file_a_storage:
+                data_a = file_a_storage.read()
+                name_a = file_a_storage.filename
+            elif content_a_b64:
+                data_a = base64.b64decode(content_a_b64)
+            
+            if file_b_storage:
+                data_b = file_b_storage.read()
+                name_b = file_b_storage.filename
+            elif content_b_b64:
+                data_b = base64.b64decode(content_b_b64)
+                
+            if not data_a or not data_b:
+                flash("Both files are required.", "danger")
+                return render_template('staff/tool_compare_certs.html', title='Compare Certificates')
+
+            # Parse Sources
+            source_a = parse_cert_source(data_a, name_a, pass_a)
+            source_b = parse_cert_source(data_b, name_b, pass_b)
+            
+            # Check if selection needed
+            alias_a = request.form.get('alias_a')
+            alias_b = request.form.get('alias_b')
+            
+            needs_selection_a = (source_a['type'] == 'multi' and not alias_a)
+            needs_selection_b = (source_b['type'] == 'multi' and not alias_b)
+            
+            if needs_selection_a or needs_selection_b:
+                selection_stage = True
+                return render_template('staff/tool_compare_certs.html', 
+                                       title='Compare Certificates', 
+                                       selection_stage=True,
+                                       source_a=source_a, source_b=source_b,
+                                       pass_a=pass_a, pass_b=pass_b,
+                                       name_a=name_a, name_b=name_b,
+                                       content_a_b64=base64.b64encode(data_a).decode(),
+                                       content_b_b64=base64.b64encode(data_b).decode())
+
+            # Extract actual certs
+            cert_a_obj = extract_cert_from_source(source_a, alias_a, pass_a)
+            cert_b_obj = extract_cert_from_source(source_b, alias_b, pass_b)
+            
+            # Clean up temps
+            if 'temp_path' in source_a: os.remove(source_a['temp_path'])
+            if 'temp_path' in source_b: os.remove(source_b['temp_path'])
+
+            # Compare
+            # File Hashes
+            hash_a = hashlib.sha256(data_a).hexdigest()
+            hash_b = hashlib.sha256(data_b).hexdigest()
+            
+            # Extract Details using tool_x509 logic helper (we need to refactor logic or duplicate slightly)
+            def get_details(cert):
+                 pub = cert.public_key()
+                 pub_n = pub.public_numbers()
+                 return {
+                     'subject': cert.subject.rfc4514_string(),
+                     'issuer': cert.issuer.rfc4514_string(),
+                     'serial': str(cert.serial_number),
+                     'version': cert.version.name if hasattr(cert, 'version') else 'v1',
+                     'not_before': cert.not_valid_before,
+                     'not_after': cert.not_valid_after,
+                     'fingerprint_sha1': binascii.hexlify(cert.fingerprint(hashes.SHA1())).decode(),
+                     'pub_alg': pub.__class__.__name__,
+                     'pub_size': pub.key_size,
+                     'pub_modulus_sha256': hashlib.sha256(str(pub_n.n).encode()).hexdigest() if hasattr(pub_n, 'n') else 'N/A',
+                     'san': get_extensions(cert.extensions) # simplistic logic
+                 }
+
+            details_a = get_details(cert_a_obj)
+            details_b = get_details(cert_b_obj)
+            
+            # Diff logic
+            comparison = []
+            keys = ['subject', 'issuer', 'serial', 'version', 'not_before', 'not_after', 'fingerprint_sha1', 'pub_alg', 'pub_size', 'pub_modulus_sha256']
+            for k in keys:
+                match = (details_a[k] == details_b[k])
+                comparison.append({
+                    'key': k,
+                    'val_a': details_a[k],
+                    'val_b': details_b[k],
+                    'match': match
+                })
+            
+            result = {
+                'match_file_hash': (hash_a == hash_b),
+                'hash_a': hash_a,
+                'hash_b': hash_b,
+                'comparison': comparison,
+                'name_a': name_a,
+                'name_b': name_b
+            }
+            
+        except Exception as e:
+            # import traceback
+            # traceback.print_exc()
+            error = f"Error processing certificates: {str(e)}"
+            # Cleanup attempts
+            try:
+                if 'source_a' in locals() and 'temp_path' in source_a: os.remove(source_a['temp_path'])
+                if 'source_b' in locals() and 'temp_path' in source_b: os.remove(source_b['temp_path'])
+            except: pass
+
+    return render_template('staff/tool_compare_certs.html', title='Compare Certificates', result=result, error=error)
