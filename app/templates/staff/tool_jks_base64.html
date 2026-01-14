@@ -33,6 +33,23 @@
                         onclick="navigator.clipboard.writeText(`{{ result }}`)">
                         <i class="fas fa-copy"></i> Copy to Clipboard
                     </button>
+                    <button class="btn btn-outline-primary btn-sm mt-2 ms-2" onclick="downloadBase64()">
+                        <i class="fas fa-download"></i> Download .txt
+                    </button>
+                    <script>
+                        function downloadBase64() {
+                            const text = `{{ result }}`;
+                            const blob = new Blob([text], { type: 'text/plain' });
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = 'jks_base64.txt';
+                            document.body.appendChild(a);
+                            a.click();
+                            window.URL.revokeObjectURL(url);
+                            document.body.removeChild(a);
+                        }
+                    </script>
                 </div>
                 {% endif %}
             </div>
